@@ -1,6 +1,70 @@
-local bloxFruit = loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/Blox Fruits/master/source"))()
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Kiểm tra Mirage Island có xuất hiện không
+local function isMirageIslandPresent()
+    local gui = LocalPlayer.PlayerGui:FindFirstChild("MainUI")
+    if gui and gui:FindFirstChild("ServerLabel") then
+        return gui.ServerLabel.Text == "Mirage Island"
+    end
+    return false
+end
+
+-- Lấy danh sách server có thể vào
+local function getServers()
+    local servers = {}
+    local nextPageCursor = ""
+    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+
+    while true do
+        local response = HttpService:JSONDecode(game:HttpGet(url .. "&cursor=" .. nextPageCursor))
+        if response and response.data then
+            for _, server in ipairs(response.data) do
+                if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                    table.insert(servers, server.id)
+                end
+            end
+        end
+        if response.nextPageCursor then
+            nextPageCursor = response.nextPageCursor
+        else
+            break
+        end
+    end
+    return servers
+end
+
+-- Tìm server có Mirage Island
+local function findMirageIslandServer()
+    local servers = getServers()
+    for _, serverId in ipairs(servers) do
+        -- Teleport vào server
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, serverId, LocalPlayer)
+
+        -- Đợi game load xong
+        wait(10) 
+
+        -- Kiểm tra Mirage Island
+        if isMirageIslandPresent() then
+            print("Đã tìm thấy Mirage Island!")
+            return true
+        end
+    end
+    return false
+end
+
+-- Bắt đầu tìm kiếm
 while true do
-    wait(1)if game:GetService("Players").LocalPlayer.PlayerGui.MainUI.ServerLabel.Text ~="Mirage Island" then
-        game:GetService("TeleportService"):Teleport(game.PlaceId, game:GetService("Players").LocalPlayer)
+    wait(2)
+    if isMirageIslandPresent() then
+        print("Bạn đã ở trong server có Mirage Island!")
+        break
+    else
+        print("Tìm server có Mirage Island...")
+        if findMirageIslandServer() then
+            break
+        end
     end
 end
