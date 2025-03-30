@@ -1,6 +1,10 @@
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))() local Window = Library.CreateLib("Anura hub","PinkTheme")
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))() local Window = Library.CreateLib("Anura hub","DarkTheme")
 
--- Toggle Menu Button local UIS = game:GetService("UserInputService") local isOpen = true UIS.InputBegan:Connect(function(input, gameProcessed) if input.KeyCode == Enum.KeyCode.RightControl then if isOpen then Window:Toggle(false) else Window:Toggle(true) end isOpen = not isOpen end end)
+-- Toggle UI Button local UIS = game:GetService("UserInputService") local toggleKey = Enum.KeyCode.RightControl -- Nhấn Right Control để ẩn/hiện menu local logo = Instance.new("ImageLabel") logo.Parent = game.CoreGui logo.Size = UDim2.new(0, 100, 0, 100) logo.Position = UDim2.new(0, 10, 0, 10) logo.Image = "rbxassetid://14190262721" logo.BackgroundTransparency = 1 logo.Active = true
+
+logo.MouseButton1Click:Connect(function() Window:Toggle() end)
+
+UIS.InputBegan:Connect(function(input, gameProcessed) if input.KeyCode == toggleKey and not gameProcessed then Window:Toggle() end end)
 
 local Tab = Window:NewTab("Main") local Section = Tab:NewSection("Auto Farm")
 
@@ -37,4 +41,5 @@ end
 end)
 
 print("Anura hub Loaded - Enjoy!")
+
 
