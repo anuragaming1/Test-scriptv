@@ -1,0 +1,68 @@
+-- Script fix lag, xóa sương mù, tăng FPS trong Roblox, dành cho Arceus X local function optimizeGame() local Lighting = game:GetService("Lighting") local Players = game:GetService("Players") local Workspace = game:GetService("Workspace")
+
+-- Tắt sương mù
+Lighting.FogEnd = 1e6
+
+-- Tắt hiệu ứng
+for _, v in pairs(Lighting:GetChildren()) do
+    if v:IsA("PostEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrection") then
+        v:Destroy()
+    end
+end
+
+-- Giảm chất lượng đồ họa
+settings():GetService("Rendering").QualityLevel = Enum.QualityLevel.Level1
+settings():GetService("Rendering").ShadowQuality = Enum.ShadowQuality.Off
+
+-- Xóa môi trường như cây, đất, đá
+for _, v in pairs(Workspace:GetDescendants()) do
+    if v:IsA("Part") or v:IsA("MeshPart") then
+        if string.find(string.lower(v.Name), "tree") or string.find(string.lower(v.Name), "grass") or string.find(string.lower(v.Name), "ground") or string.find(string.lower(v.Name), "rock") then
+            v:Destroy()
+        else
+            v.Material = Enum.Material.SmoothPlastic
+            v.Reflectance = 0
+        end
+    end
+end
+
+-- Biến nhân vật thành màu xám
+for _, player in pairs(Players:GetPlayers()) do
+    if player.Character then
+        for _, part in pairs(player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Color = Color3.fromRGB(128, 128, 128)
+            end
+        end
+    end
+end
+
+-- Hiển thị logo và chữ "Anura Gaming"
+for _, player in pairs(Players:GetPlayers()) do
+    local gui = Instance.new("ScreenGui")
+    gui.Parent = player:FindFirstChild("PlayerGui")
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Parent = gui
+    textLabel.Size = UDim2.new(1, 0, 0.1, 0)
+    textLabel.Position = UDim2.new(0, 0, 0, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = "Anura Gaming"
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.SourceSansBold
+    
+    local imageLabel = Instance.new("ImageLabel")
+    imageLabel.Parent = gui
+    imageLabel.Size = UDim2.new(0, 100, 0, 100)
+    imageLabel.Position = UDim2.new(0.5, -50, 0.05, 0)
+    imageLabel.BackgroundTransparency = 1
+    imageLabel.Image = "rbxassetid://14190262721"
+end
+
+print("Tối ưu hóa hoàn tất! Arceus X đã chạy thành công.")
+
+end
+
+optimizeGame()
+
