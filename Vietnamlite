@@ -12,7 +12,9 @@ local Tab2 = Window:NewTab("Player") local Section2 = Tab2:NewSection("Player Mo
 
 Section2:NewSlider("WalkSpeed","Adjust your speed", 500, 16, function(s) game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = s end)
 
-Section2:NewButton("Infinite Yield","Loads Infinite Yield", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))() end)
+Section2:NewButton("Maru Hub","Loads Maru Hub", function() getgenv().Key = "MARU-9P0Z8-Y8UOM-XBC4-67MQZ-E1TVI"
+getgenv().id = "1208596199603445801"
+loadstring(game:HttpGet("https://raw.githubusercontent.com/xshiba/MaruBitkub/main/Mobile.lua"))()
 
 Section2:NewButton("God Mode","Become invincible", function() local player = game.Players.LocalPlayer player.Character.Humanoid.MaxHealth = math.huge player.Character.Humanoid.Health = math.huge end)
 
