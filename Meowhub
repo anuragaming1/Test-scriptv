@@ -1,0 +1,960 @@
+-- Khởi tạo script
+local AnuraHub = {}
+AnuraHub.Version = "1.0.0"
+AnuraHub.Author = "Protected by Anura"
+AnuraHub.StartTime = tick()
+AnuraHub.FPS = 0
+AnuraHub.AutoBounty = true
+AnuraHub.TargetPlayer = nil
+AnuraHub.SafeZoneCFrame = CFrame.new(0, 100, 0)
+AnuraHub.BountyThreshold = 10000000 -- 10M bounty để summon Sea Beast
+
+-- Tải UI Library (ẩn đi để làm Kaitun tự động)
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+
+-- Tạo GUI hiển thị
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AnuraHubGUI"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Tiêu đề Anura Hub
+local Title = Instance.new("TextLabel")
+Title.Parent = ScreenGui
+Title.Size = UDim2.new(0, 200, 0, 50)
+Title.Position = UDim2.new(0.5, -100, 0, 10)
+Title.Text = "Anura Hub"
+Title.TextColor3 = Color3.fromRGB(255, 0, 0) -- Màu đỏ
+Title.BackgroundTransparency = 1
+Title.TextScaled = true
+Title.Font = Enum.Font.SourceSansBold
+
+-- Tiêu đề Auto Bounty
+local SubTitle = Instance.new("TextLabel")
+SubTitle.Parent = ScreenGui
+SubTitle.Size = UDim2.new(0, 200, 0, 30)
+SubTitle.Position = UDim2.new(0.5, -100, 0, 60)
+SubTitle.Text = "Auto Bounty"
+SubTitle.TextColor3 = Color3.fromRGB(0, 191, 255) -- Màu xanh nước biển
+SubTitle.BackgroundTransparency = 1
+SubTitle.TextScaled = true
+SubTitle.Font = Enum.Font.SourceSans
+
+-- Hiển thị thông tin FPS và thời gian
+local StatsLabel = Instance.new("TextLabel")
+StatsLabel.Parent = ScreenGui
+StatsLabel.Size = UDim2.new(0, 200, 0, 30)
+StatsLabel.Position = UDim2.new(0.5, -100, 0, 90)
+StatsLabel.BackgroundTransparency = 1
+StatsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+StatsLabel.TextScaled = true
+StatsLabel.Font = Enum.Font.SourceSans
+
+-- Module đo FPS
+local function updateFPS()
+    spawn(function()
+        while wait(1) do
+            local lastFrame = tick()
+            wait()
+            AnuraHub.FPS = math.floor(1 / (tick() - lastFrame))
+        end
+    end)
+end
+
+-- Module cập nhật thông tin
+local function updateStats()
+    spawn(function()
+        while wait(0.5) do
+            local timeElapsed = math.floor(tick() - AnuraHub.StartTime)
+            StatsLabel.Text = "FPS: " .. AnuraHub.FPS .. " | Time: " .. timeElapsed .. "s"
+        end
+    end)
+end
+
+-- Module kiểm tra nhân vật
+local function getCharacter()
+    local player = game.Players.LocalPlayer
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+-- Module kiểm tra root part
+local function getRootPart(character)
+    return character:WaitForChild("HumanoidRootPart", 5)
+end
+
+-- Module kiểm tra humanoid
+local function getHumanoid(character)
+    return character:WaitForChild("Humanoid", 5)
+end
+
+-- Module fly
+local function enableFly()
+    local character = getCharacter()
+    local rootPart = getRootPart(character)
+    local humanoid = getHumanoid(character)
+    if not rootPart or not humanoid then return end
+    
+    local bodyGyro = Instance.new("BodyGyro")
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyGyro.P = 9e4
+    bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bodyGyro.Parent = rootPart
+    bodyVelocity.Parent = rootPart
+    bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    
+    spawn(function()
+        while AnuraHub.AutoBounty do
+            local camera = game.Workspace.CurrentCamera
+            bodyVelocity.Velocity = (camera.CFrame.LookVector * 100) + Vector3.new(0, 50, 0)
+            bodyGyro.CFrame = camera.CFrame
+            wait(0.01)
+        end
+        bodyGyro:Destroy()
+        bodyVelocity:Destroy()
+    end)
+end
+
+-- Module aim
+local function aimAtTarget(targetRoot)
+    local character = getCharacter()
+    local rootPart = getRootPart(character)
+    if rootPart and targetRoot then
+        game.Workspace.CurrentCamera.CFrame = CFrame.new(rootPart.Position, targetRoot.Position)
+    end
+end
+
+-- Module sử dụng skill
+local SkillCooldowns = {}
+local function useSkill(key)
+    if not SkillCooldowns[key] or tick() - SkillCooldowns[key] > 0.5 then
+        game:GetService("VirtualInputManager"):SendKeyEvent(true, key, false, game)
+        wait(0.05)
+        game:GetService("VirtualInputManager"):SendKeyEvent(false, key, false, game)
+        SkillCooldowns[key] = tick()
+    end
+end
+
+-- Module tấn công cơ bản
+local function basicAttack()
+    game:GetService("VirtualUser"):Button1Down(Vector2.new(0, 0))
+    wait(0.05)
+    game:GetService("VirtualUser"):Button1Up(Vector2.new(0, 0))
+end
+-- Module tấn công cơ bản
+local function basicAttack()
+    game:GetService("VirtualUser"):Button1Down(Vector2.new(0, 0))
+    wait(0.05)
+    game:GetService("VirtualUser"):Button1Up(Vector2.new(0, 0))
+end
+
+-- Module chọn team hải tặc
+local function selectPirateTeam()
+    local success, err = pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("SetTeam", "Pirates")
+    end)
+    if not success then warn("Failed to select Pirate team: " .. err) end
+end
+
+-- Module bật Instinct
+local function enableInstinct()
+    local success, err = pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("KenTalk", "Talk")
+    end)
+    if not success then warn("Failed to enable Instinct: " .. err) end
+end
+
+-- Module bật Aura
+local function enableAura()
+    local success, err = pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("BuyHaki", "Buso")
+    end)
+    if not success then warn("Failed to enable Aura: " .. err) end
+end
+
+-- Module bật tộc V3
+local function enableRaceV3()
+    local player = game.Players.LocalPlayer
+    local race = player.Data.Race.Value
+    if race == "Human" or race == "Skypiean" or race == "Mink" or race == "Fishman" then
+        local success, err = pcall(function()
+            game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("BuyRaceV3")
+        end)
+        if not success then warn("Failed to enable Race V3: " .. err) end
+    end
+end
+
+-- Module bật tộc V4
+local function enableRaceV4()
+    local success, err = pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("RaceV4Progress", "Begin")
+    end)
+    if not success then warn("Failed to enable Race V4: " .. err) end
+end
+
+-- Module summon Sea Beast
+local function summonSeaBeast()
+    local success, err = pcall(function()
+        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("BuyBoat", "SeaBeast")
+    end)
+    if not success then warn("Failed to summon Sea Beast: " .. err) end
+end
+
+-- Module hop server
+local function hopServer()
+    local success, servers = pcall(function()
+        return game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+    end)
+    if success and servers then
+        for _, v in pairs(servers.data) do
+            if v.id ~= game.JobId then
+                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, v.id)
+                break
+            end
+        end
+    end
+end
+
+-- Module tìm mục tiêu
+local function findNextPlayer()
+    local player = game.Players.LocalPlayer
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character.Humanoid.Health > 0 then
+            AnuraHub.TargetPlayer = v
+            break
+        end
+    end
+end
+
+-- Module kiểm tra khoảng cách
+local function getDistanceToTarget(targetRoot)
+    local character = getCharacter()
+    local rootPart = getRootPart(character)
+    if rootPart and targetRoot then
+        return (rootPart.Position - targetRoot.Position).Magnitude
+    end
+    return math.huge
+end
+
+-- Module di chuyển đến mục tiêu
+local function moveToTarget(targetRoot)
+    local character = getCharacter()
+    local rootPart = getRootPart(character)
+    if rootPart and targetRoot then
+        rootPart.CFrame = targetRoot.CFrame * CFrame.new(0, 10, -10)
+    end
+end
+
+-- Module kiểm tra bounty
+local function checkBounty()
+    local player = game.Players.LocalPlayer
+    return player.leaderstats["Bounty/Honor"].Value
+end
+
+-- Module chống ban
+local function antiBan()
+    spawn(function()
+        while wait(math.random(5, 10)) do
+            pcall(function()
+                game:GetService("VirtualUser"):CaptureController()
+                local randomKey = math.random(1, 4) == 1 and "W" or "S" or "A" or "D"
+                game:GetService("VirtualUser"):SetKeyDown(randomKey)
+                wait(math.random(1, 3))
+                game:GetService("VirtualUser"):SetKeyUp(randomKey)
+            end)
+        end
+    end)
+end
+
+-- Module chống kick
+local function antiKick()
+    game:GetService("Players").LocalPlayer.Idled:Connect(function()
+        pcall(function()
+            game:GetService("VirtualUser"):CaptureController()
+            game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+        end)
+    end)
+end
+
+-- Module xử lý lỗi
+local function safeCall(func, ...)
+    local success, err = pcall(func, ...)
+    if not success then
+        warn("Error in " .. debug.getinfo(2).name .. ": " .. err)
+    end
+end
+
+-- Module kiểm tra trạng thái game
+local function checkGameState()
+    if game:IsLoaded() and game.Players.LocalPlayer then
+        return true
+    end
+    return false
+end
+
+-- Module khởi tạo
+local function initialize()
+    if not checkGameState() then
+        repeat wait(1) until checkGameState()
+    end
+    
+    safeCall(updateFPS)
+    safeCall(updateStats)
+    safeCall(selectPirateTeam)
+    safeCall(enableInstinct)
+    safeCall(enableAura)
+    safeCall(enableRaceV3)
+    safeCall(enableRaceV4)
+    safeCall(enableFly)
+    safeCall(antiBan)
+    safeCall(antiKick)
+    safeCall(findNextPlayer)
+end
+-- Main combat loop
+local function combatLoop()
+    spawn(function()
+        while AnuraHub.AutoBounty do
+            safeCall(function()
+                local character = getCharacter()
+                local rootPart = getRootPart(character)
+                local humanoid = getHumanoid(character)
+                
+                if not rootPart or not humanoid then return end
+                
+                -- Kiểm tra bounty để summon Sea Beast
+                if checkBounty() >= AnuraHub.BountyThreshold then
+                    safeCall(summonSeaBeast)
+                end
+                
+                -- Tìm mục tiêu mới nếu cần
+                if not AnuraHub.TargetPlayer or not AnuraHub.TargetPlayer.Character or AnuraHub.TargetPlayer.Character.Humanoid.Health <= 0 then
+                    safeCall(findNextPlayer)
+                end
+                
+                if AnuraHub.TargetPlayer and AnuraHub.TargetPlayer.Character then
+                    local targetRoot = AnuraHub.TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if targetRoot then
+                        -- Aim và di chuyển
+                        safeCall(aimAtTarget, targetRoot)
+                        safeCall(moveToTarget, targetRoot)
+                        
+                        -- Sử dụng skill
+                        safeCall(useSkill, "Z")
+                        safeCall(useSkill, "X")
+                        safeCall(useSkill, "C")
+                        safeCall(useSkill, "V")
+                        safeCall(useSkill, "F")
+                        safeCall(basicAttack)
+                        
+                        -- Kiểm tra khoảng cách
+                        if getDistanceToTarget(targetRoot) > 50 then
+                            safeCall(findNextPlayer)
+                        end
+                    end
+                end
+                
+                -- Hop server ngẫu nhiên
+                if math.random(1, 600) == 1 then
+                    safeCall(hopServer)
+                end
+            end)
+            wait(0.05)
+        end
+    end)
+end
+
+-- Module xử lý input
+local function setupInput()
+    game:GetService("UserInputService").InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.E then
+            safeCall(findNextPlayer)
+        end
+    end)
+end
+
+-- Module tối ưu hiệu suất
+local function optimizePerformance()
+    spawn(function()
+        while wait(60) do
+            pcall(function()
+                game:GetService("Lighting").GlobalShadows = false
+                game:GetService("Lighting").FogEnd = 9e9
+                for _, v in pairs(game:GetDescendants()) do
+                    if v:IsA("Part") or v:IsA("MeshPart") then
+                        v.Material = Enum.Material.SmoothPlastic
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Module log hoạt động
+local ActivityLog = {}
+local function logActivity(message)
+    table.insert(ActivityLog, {Time = tick(), Message = message})
+    if #ActivityLog > 100 then
+        table.remove(ActivityLog, 1)
+    end
+end
+
+-- Module kiểm tra cập nhật
+local function checkForUpdates()
+    spawn(function()
+        while wait(300) do
+            pcall(function()
+                local versionCheck = game:HttpGet("https://example.com/anura_hub_version.txt")
+                if versionCheck ~= AnuraHub.Version then
+                    warn("New version available: " .. versionCheck)
+                end
+            end)
+        end
+    end)
+end
+
+-- Module xử lý sự kiện
+local function setupEvents()
+    game.Players.LocalPlayer.CharacterAdded:Connect(function()
+        safeCall(enableFly)
+        safeCall(findNextPlayer)
+    end)
+    
+    game.Players.PlayerRemoving:Connect(function(player)
+        if player == AnuraHub.TargetPlayer then
+            safeCall(findNextPlayer)
+        end
+    end)
+end
+
+-- Module bảo mật
+local function secureScript()
+    spawn(function()
+        while wait(10) do
+            pcall(function()
+                for _, v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+                    if v:IsA("RemoteEvent") and v.Name:lower():find("ban") then
+                        v:Destroy()
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Module tự động lưu cấu hình
+local Config = {
+    AutoBounty = true,
+    FlySpeed = 100,
+    AttackDelay = 0.05
+}
+local function saveConfig()
+    spawn(function()
+        while wait(300) do
+            pcall(function()
+                writefile("AnuraHubConfig.json", game:GetService("HttpService"):JSONEncode(Config))
+            end)
+        end
+    end)
+end
+
+-- Module tải cấu hình
+local function loadConfig()
+    pcall(function()
+        if isfile("AnuraHubConfig.json") then
+            Config = game:GetService("HttpService"):JSONDecode(readfile("AnuraHubConfig.json"))
+            AnuraHub.AutoBounty = Config.AutoBounty
+        end
+    end)
+end
+
+-- Khởi động script
+local function startScript()
+    logActivity("Script started")
+    safeCall(initialize)
+    safeCall(combatLoop)
+    safeCall(setupInput)
+    safeCall(optimizePerformance)
+    safeCall(checkForUpdates)
+    safeCall(setupEvents)
+    safeCall(secureScript)
+    safeCall(loadConfig)
+    safeCall(saveConfig)
+end
+-- Main combat loop
+local function combatLoop()
+    spawn(function()
+        while AnuraHub.AutoBounty do
+            safeCall(function()
+                local character = getCharacter()
+                local rootPart = getRootPart(character)
+                local humanoid = getHumanoid(character)
+                
+                if not rootPart or not humanoid then return end
+                
+                -- Kiểm tra bounty để summon Sea Beast
+                if checkBounty() >= AnuraHub.BountyThreshold then
+                    safeCall(summonSeaBeast)
+                end
+                
+                -- Tìm mục tiêu mới nếu cần
+                if not AnuraHub.TargetPlayer or not AnuraHub.TargetPlayer.Character or AnuraHub.TargetPlayer.Character.Humanoid.Health <= 0 then
+                    safeCall(findNextPlayer)
+                end
+                
+                if AnuraHub.TargetPlayer and AnuraHub.TargetPlayer.Character then
+                    local targetRoot = AnuraHub.TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if targetRoot then
+                        -- Aim và di chuyển
+                        safeCall(aimAtTarget, targetRoot)
+                        safeCall(moveToTarget, targetRoot)
+                        
+                        -- Sử dụng skill
+                        safeCall(useSkill, "Z")
+                        safeCall(useSkill, "X")
+                        safeCall(useSkill, "C")
+                        safeCall(useSkill, "V")
+                        safeCall(useSkill, "F")
+                        safeCall(basicAttack)
+                        
+                        -- Kiểm tra khoảng cách
+                        if getDistanceToTarget(targetRoot) > 50 then
+                            safeCall(findNextPlayer)
+                        end
+                    end
+                end
+                
+                -- Hop server ngẫu nhiên
+                if math.random(1, 600) == 1 then
+                    safeCall(hopServer)
+                end
+            end)
+            wait(0.05)
+        end
+    end)
+end
+
+-- Module xử lý input
+local function setupInput()
+    game:GetService("UserInputService").InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.E then
+            safeCall(findNextPlayer)
+        end
+    end)
+end
+
+-- Module tối ưu hiệu suất
+local function optimizePerformance()
+    spawn(function()
+        while wait(60) do
+            pcall(function()
+                game:GetService("Lighting").GlobalShadows = false
+                game:GetService("Lighting").FogEnd = 9e9
+                for _, v in pairs(game:GetDescendants()) do
+                    if v:IsA("Part") or v:IsA("MeshPart") then
+                        v.Material = Enum.Material.SmoothPlastic
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Module log hoạt động
+local ActivityLog = {}
+local function logActivity(message)
+    table.insert(ActivityLog, {Time = tick(), Message = message})
+    if #ActivityLog > 100 then
+        table.remove(ActivityLog, 1)
+    end
+end
+
+-- Module kiểm tra cập nhật
+local function checkForUpdates()
+    spawn(function()
+        while wait(300) do
+            pcall(function()
+                local versionCheck = game:HttpGet("https://example.com/anura_hub_version.txt")
+                if versionCheck ~= AnuraHub.Version then
+                    warn("New version available: " .. versionCheck)
+                end
+            end)
+        end
+    end)
+end
+
+-- Module xử lý sự kiện
+local function setupEvents()
+    game.Players.LocalPlayer.CharacterAdded:Connect(function()
+        safeCall(enableFly)
+        safeCall(findNextPlayer)
+    end)
+    
+    game.Players.PlayerRemoving:Connect(function(player)
+        if player == AnuraHub.TargetPlayer then
+            safeCall(findNextPlayer)
+        end
+    end)
+end
+
+-- Module bảo mật
+local function secureScript()
+    spawn(function()
+        while wait(10) do
+            pcall(function()
+                for _, v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+                    if v:IsA("RemoteEvent") and v.Name:lower():find("ban") then
+                        v:Destroy()
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Module tự động lưu cấu hình
+local Config = {
+    AutoBounty = true,
+    FlySpeed = 100,
+    AttackDelay = 0.05
+}
+local function saveConfig()
+    spawn(function()
+        while wait(300) do
+            pcall(function()
+                writefile("AnuraHubConfig.json", game:GetService("HttpService"):JSONEncode(Config))
+            end)
+        end
+    end)
+end
+
+-- Module tải cấu hình
+local function loadConfig()
+    pcall(function()
+        if isfile("AnuraHubConfig.json") then
+            Config = game:GetService("HttpService"):JSONDecode(readfile("AnuraHubConfig.json"))
+            AnuraHub.AutoBounty = Config.AutoBounty
+        end
+    end)
+end
+
+-- Khởi động script
+local function startScript()
+    logActivity("Script started")
+    safeCall(initialize)
+    safeCall(combatLoop)
+    safeCall(setupInput)
+    safeCall(optimizePerformance)
+    safeCall(checkForUpdates)
+    safeCall(setupEvents)
+    safeCall(secureScript)
+    safeCall(loadConfig)
+    safeCall(saveConfig)
+end
+-- Chạy script
+startScript()
+
+-- Thêm các hàm phụ trợ
+local function randomDelay(min, max)
+    wait(math.random(min, max) / 1000)
+end
+
+local function getPlayerPosition(player)
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        return player.Character.HumanoidRootPart.Position
+    end
+    return nil
+end
+
+local function isPlayerAlive(player)
+    return player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0
+end
+
+local function getNearestPlayer()
+    local player = game.Players.LocalPlayer
+    local nearest, nearestDist = nil, math.huge
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= player and isPlayerAlive(v) then
+            local dist = (getPlayerPosition(player) - getPlayerPosition(v)).Magnitude
+            if dist < nearestDist then
+                nearest = v
+                nearestDist = dist
+            end
+        end
+    end
+    return nearest
+end
+
+-- Module kiểm tra thiết bị
+local function checkDevice()
+    local userInput = game:GetService("UserInputService")
+    if userInput.TouchEnabled then
+        logActivity("Running on mobile device")
+    else
+        logActivity("Running on PC")
+    end
+end
+
+-- Module tối ưu cho mobile
+local function optimizeForMobile()
+    if game:GetService("UserInputService").TouchEnabled then
+        Config.AttackDelay = 0.1
+        logActivity("Optimized for mobile: Increased attack delay")
+    end
+end
+
+-- Module xử lý mạng
+local function checkNetwork()
+    spawn(function()
+        while wait(60) do
+            pcall(function()
+                local ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+                if ping > 200 then
+                    logActivity("High ping detected: " .. ping)
+                    Config.AttackDelay = Config.AttackDelay + 0.05
+                end
+            end)
+        end
+    end)
+end
+
+-- Module thông báo
+local NotificationLabel = Instance.new("TextLabel")
+NotificationLabel.Parent = ScreenGui
+NotificationLabel.Size = UDim2.new(0, 200, 0, 30)
+NotificationLabel.Position = UDim2.new(0.5, -100, 0, 120)
+NotificationLabel.BackgroundTransparency = 1
+NotificationLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+NotificationLabel.TextScaled = true
+NotificationLabel.Font = Enum.Font.SourceSans
+
+local function notify(message)
+    NotificationLabel.Text = message
+    spawn(function()
+        wait(5)
+        NotificationLabel.Text = ""
+    end)
+end
+
+-- Module kiểm tra inventory
+local function checkInventory()
+    spawn(function()
+        while wait(300) do
+            pcall(function()
+                local player = game.Players.LocalPlayer
+                if player.Backpack:FindFirstChild("Combat") then
+                    notify("Warning: Using default Combat")
+                end
+            end)
+        end
+    end)
+end
+
+-- Module tự động trang bị vũ khí
+local function autoEquipWeapon()
+    spawn(function()
+        while wait(10) do
+            pcall(function()
+                local player = game.Players.LocalPlayer
+                local bestWeapon = nil
+                for _, v in pairs(player.Backpack:GetChildren()) do
+                    if v:IsA("Tool") and v.Name ~= "Combat" then
+                        bestWeapon = v
+                        break
+                    end
+                end
+                if bestWeapon then
+                    player.Character.Humanoid:EquipTool(bestWeapon)
+                    logActivity("Equipped weapon: " .. bestWeapon.Name)
+                end
+            end)
+        end
+    end)
+end
+
+-- Module kiểm tra Sea Beast
+local function checkSeaBeast()
+    spawn(function()
+        while wait(30) do
+            pcall(function()
+                for _, v in pairs(game.Workspace.SeaBeasts:GetChildren()) do
+                    if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
+                        notify("Sea Beast detected!")
+                        AnuraHub.TargetPlayer = nil -- Chuyển mục tiêu sang Sea Beast
+                        break
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Module xử lý Sea Beast
+local function handleSeaBeast()
+    spawn(function()
+        while wait(0.1) do
+            pcall(function()
+                for _, v in pairs(game.Workspace.SeaBeasts:GetChildren()) do
+                    if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") then
+                        local rootPart = getRootPart(getCharacter())
+                        local seaBeastRoot = v.HumanoidRootPart
+                        safeCall(aimAtTarget, seaBeastRoot)
+                        safeCall(moveToTarget, seaBeastRoot)
+                        safeCall(useSkill, "Z")
+                        safeCall(useSkill, "X")
+                        safeCall(basicAttack)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Module kiểm tra server
+local function checkServerStatus()
+    spawn(function()
+        while wait(600) do
+            pcall(function()
+                local playerCount = #game.Players:GetPlayers()
+                if playerCount < 5 then
+                    notify("Low player count, hopping server...")
+                    safeCall(hopServer)
+                end
+            end)
+        end
+    end)
+end
+
+-- Module tối ưu đồ họa
+local function optimizeGraphics()
+    pcall(function()
+        local lighting = game:GetService("Lighting")
+        lighting.Brightness = 1
+        lighting.ClockTime = 12
+        lighting.FogEnd = 100000
+        for _, v in pairs(game:GetService("Workspace"):GetDescendants()) do
+            if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
+                v.CastShadow = false
+            end
+        end
+    end)
+end
+
+-- Module xử lý lỗi mạng
+local function handleNetworkError()
+    spawn(function()
+        while wait(30) do
+            pcall(function()
+                if not game:IsLoaded() then
+                    notify("Network error detected, attempting to reconnect...")
+                    game:GetService("TeleportService"):Teleport(game.PlaceId)
+                end
+            end)
+        end
+    end)
+end
+
+-- Module kiểm tra anti-cheat
+local function monitorAntiCheat()
+    spawn(function()
+        while wait(60) do
+            pcall(function()
+                for _, v in pairs(game:GetService("ReplicatedStorage"):GetChildren()) do
+                    if v.Name:lower():find("cheat") or v.Name:lower():find("ban") then
+                        notify("Potential anti-cheat detected: " .. v.Name)
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Module tự động hồi sinh
+local function autoRespawn()
+    game.Players.LocalPlayer.CharacterAdded:Connect(function()
+        notify("Character respawned")
+        safeCall(enableFly)
+        safeCall(findNextPlayer)
+    end)
+end
+
+-- Module kiểm tra ping
+local function monitorPing()
+    spawn(function()
+        while wait(60) do
+            pcall(function()
+                local ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+                if ping > 300 then
+                    notify("High ping: " .. ping .. "ms")
+                end
+            end)
+        end
+    end)
+end
+
+-- Module tối ưu bộ nhớ
+local function optimizeMemory()
+    spawn(function()
+        while wait(300) do
+            pcall(function()
+                collectgarbage("collect")
+                logActivity("Memory optimized")
+            end)
+        end
+    end)
+end
+
+-- Module xử lý sự kiện chat
+local function setupChatEvents()
+    game.Players.LocalPlayer.Chatted:Connect(function(message)
+        if message:lower() == "/stop" then
+            AnuraHub.AutoBounty = false
+            notify("Auto Bounty stopped")
+        elseif message:lower() == "/start" then
+            AnuraHub.AutoBounty = true
+            safeCall(combatLoop)
+            notify("Auto Bounty started")
+        end
+    end)
+end
+
+-- Module kiểm tra update game
+local function checkGameUpdate()
+    spawn(function()
+        while wait(3600) do
+            pcall(function()
+                local currentPlaceId = game.PlaceId
+                local gameInfo = game:GetService("MarketplaceService"):GetProductInfo(currentPlaceId)
+                logActivity("Game version: " .. gameInfo.Updated)
+            end)
+        end
+    end)
+end
+
+-- Module xử lý lệnh ẩn
+local function setupHiddenCommands()
+    game:GetService("UserInputService").InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.F9 then
+            for _, log in pairs(ActivityLog) do
+                print("[" .. math.floor(log.Time - AnuraHub.StartTime) .. "s] " .. log.Message)
+            end
+        end
+    end)
+end
+-- Chạy các module bổ sung
+safeCall(checkDevice)
+safeCall(optimizeForMobile)
+safeCall(checkNetwork)
+safeCall(checkInventory)
+safeCall(autoEquipWeapon)
+safeCall(checkSeaBeast)
+safeCall(handleSeaBeast)
+safeCall(checkServerStatus)
+safeCall(optimizeGraphics)
+safeCall(handleNetworkError)
+safeCall(monitorAntiCheat)
+safeCall(autoRespawn)
+safeCall(monitorPing)
+safeCall(optimizeMemory)
+safeCall(setupChatEvents)
+safeCall(checkGameUpdate)
+safeCall(setupHiddenCommands)
