@@ -1,0 +1,1610 @@
+-- Dịch vụ cần thiết từ Roblox
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+
+-- Bảng cấu hình chi tiết (bao gồm Anti-Ban)
+local CombatConfig = {
+    -- Cấu hình tốc độ và khoảng cách
+    TeleportSpeed = 300,
+    TeleportSpeedFast = 500,
+    TeleportSpeedSlow = 200,
+    MaxAttackRange = 15,
+    MinAttackRange = 3,
+    OptimalAttackRange = 8,
+    
+    -- Offset TP
+    TeleportOffset = {
+        Above = Vector3.new(0, 5, 0),
+        Behind = Vector3.new(0, 0, -3),
+        Left = Vector3.new(-3, 0, 0),
+        Right = Vector3.new(3, 0, 0),
+        Front = Vector3.new(0, 0, 3),
+        Random = function() return Vector3.new(math.random(-5, 5), math.random(3, 7), math.random(-5, 5)) end
+    },
+    
+    -- Delay và thời gian
+    DefaultComboDelay = 0.2,
+    FastComboDelay = 0.15,
+    SlowComboDelay = 0.3,
+    WeaponSwitchDelay = 0.5,
+    BasicAttackDelay = 0.1,
+    BuffCheckInterval = 2,
+    
+    -- Trạng thái buff
+    AuraEnabled = false,
+    InstinctEnabled = false,
+    PvPEnabled = false,
+    
+    -- Cấu hình skill
+    SkillSettings = {
+        MeleeC = {Delay = 0.2, Cooldown = 1, ManaCost = 10, Damage = 50, Range = 5, Priority = 1},
+        MeleeX = {Delay = 0.25, Cooldown = 2, ManaCost = 15, Damage = 70, Range = 6, Priority = 2},
+        FruitZ = {Delay = 0.3, Cooldown = 3, ManaCost = 20, Damage = 80, Range = 10, Priority = 3},
+        FruitX = {Delay = 0.22, Cooldown = 2.5, ManaCost = 18, Damage = 60, Range = 8, Priority = 4},
+        MeleeZ = {Delay = 0.28, Cooldown = 3, ManaCost = 25, Damage = 90, Range = 7, Priority = 5},
+        SwordZ = {Delay = 0.2, Cooldown = 2, ManaCost = 15, Damage = 100, Range = 8, Priority = 6},
+        GunX = {Delay = 0.25, Cooldown = 2.5, ManaCost = 20, Damage = 70, Range = 15, Priority = 7},
+        FruitC = {Delay = 0.3, Cooldown = 4, ManaCost = 30, Damage = 120, Range = 12, Priority = 8},
+        SwordX = {Delay = 0.22, Cooldown = 2.5, ManaCost = 18, Damage = 85, Range = 9, Priority = 9},
+        GunZ = {Delay = 0.28, Cooldown = 3, ManaCost = 25, Damage = 95, Range = 20, Priority = 10},
+        FruitV = {Delay = 0.35, Cooldown = 5, ManaCost = 40, Damage = 150, Range = 15, Priority = 11},
+        FruitF = {Delay = 0.2, Cooldown = 1.5, ManaCost = 10, Damage = 40, Range = 5, Priority = 12}
+    },
+    
+    -- Cấu hình vũ khí
+    WeaponSettings = {
+        Melee = {EquipTime = 0.5, Damage = 50, Range = 5, Speed = 1, Weight = 1},
+        Sword = {EquipTime = 0.6, Damage = 70, Range = 7, Speed = 0.9, Weight = 2},
+        Fruit = {EquipTime = 0.55, Damage = 60, Range = 10, Speed = 1.1, Weight = 1.5},
+        Gun = {EquipTime = 0.65, Damage = 80, Range = 15, Speed = 0.8, Weight = 3}
+    },
+    
+    -- Cấu hình combo
+    ComboModes = {
+        Standard = {"MeleeC", "MeleeX", "FruitZ", "FruitX", "MeleeZ", "SwordZ", "GunX", "FruitC", "SwordX", "GunZ", "FruitV", "FruitF"},
+        Fast = {"MeleeC", "SwordZ", "GunX", "FruitF"},
+        HighDamage = {"FruitZ", "FruitC", "FruitV", "GunZ"},
+        Defensive = {"MeleeX", "FruitX", "SwordX"}
+    },
+    
+    -- Cấu hình Anti-Ban
+    AntiBan = {
+        MaxTeleportDistance = 50, -- Khoảng cách tối đa cho mỗi bước TP để tránh phát hiện
+        RandomDelayMin = 0.05, -- Delay ngẫu nhiên tối thiểu
+        RandomDelayMax = 0.2, -- Delay ngẫu nhiên tối đa
+        FakeWalkSpeed = 16, -- Tốc độ giả lập đi bộ
+        FakePing = {Min = 50, Max = 150}, -- Giả lập ping để tránh check server
+        ActionCooldown = 0.1, -- Delay giữa các hành động để giả lập người chơi
+        MaxActionsPerSecond = 10, -- Giới hạn số hành động mỗi giây
+        SpoofPositionInterval = 5, -- Khoảng thời gian spoof vị trí
+        SpoofVelocity = Vector3.new(0, 0, 0), -- Giả lập vận tốc
+    }
+}
+
+-- Biến lưu trữ trạng thái
+local CombatState = {
+    CurrentWeapon = "Melee",
+    LastSkillUsed = nil,
+    LastWeaponSwitch = tick(),
+    ComboInProgress = false,
+    TargetLocked = nil,
+    LastDamageDealt = 0,
+    TotalDamageDealt = 0,
+    ComboMode = "Standard",
+    LastTeleportTime = tick(),
+    LastActionTime = tick(),
+    ActionCount = 0
+}
+
+-- Hàm kiểm tra nhân vật
+local function IsCharacterReady()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or LocalPlayer.Character.Humanoid.Health <= 0 then
+        return false
+    end
+    return true
+end
+
+-- Hàm tính khoảng cách
+local function CalculateDistance(pos1, pos2)
+    return (pos1 - pos2).Magnitude
+end
+
+-- Hàm tìm player gần nhất
+local function FindNearestPlayer()
+    local closestPlayer, closestDistance = nil, math.huge
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character:FindFirstChild("HumanoidRootPart") and player.Character.Humanoid.Health > 0 and player:FindFirstChild("PvP") and player.PvP.Value then
+            local distance = CalculateDistance(LocalPlayer.Character.HumanoidRootPart.Position, player.Character.HumanoidRootPart.Position)
+            if distance < closestDistance and distance <= CombatConfig.MaxAttackRange * 2 then
+                closestDistance = distance
+                closestPlayer = player
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- Hàm giả lập hành vi người chơi
+local function SimulateHumanBehavior()
+    local randomAction = math.random(1, 3)
+    if randomAction == 1 then
+        LocalPlayer.Character.Humanoid:Move(Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)), false)
+    elseif randomAction == 2 then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new()) -- Giả lập chuột phải
+    elseif randomAction == 3 then
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new()) -- Giả lập click trái
+        wait(0.05)
+        VirtualUser:Button1Up(Vector2.new())
+    end
+    wait(math.random(CombatConfig.AntiBan.RandomDelayMin, CombatConfig.AntiBan.RandomDelayMax))
+end
+
+-- Hàm TP an toàn với giới hạn khoảng cách
+local function SafeTeleportToTarget(target, offsetType, speed)
+    if not IsCharacterReady() or not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local targetPos = target.Character.HumanoidRootPart.Position
+    local finalPos = targetPos + (offsetType == "above" and CombatConfig.TeleportOffset.Above or 
+                                  offsetType == "behind" and CombatConfig.TeleportOffset.Behind or 
+                                  offsetType == "left" and CombatConfig.TeleportOffset.Left or 
+                                  offsetType == "right" and CombatConfig.TeleportOffset.Right or 
+                                  offsetType == "front" and CombatConfig.TeleportOffset.Front or 
+                                  CombatConfig.TeleportOffset.Random())
+    
+    local currentPos = LocalPlayer.Character.HumanoidRootPart.Position
+    local distance = CalculateDistance(currentPos, finalPos)
+    local tpSpeed = speed or CombatConfig.TeleportSpeed
+    
+    -- Chia nhỏ TP nếu vượt quá giới hạn
+    if distance > CombatConfig.AntiBan.MaxTeleportDistance then
+        local steps = math.ceil(distance / CombatConfig.AntiBan.MaxTeleportDistance)
+        local stepVector = (finalPos - currentPos) / steps
+        for i = 1, steps do
+            local stepPos = currentPos + stepVector * i
+            local tweenInfo = TweenInfo.new(CombatConfig.AntiBan.MaxTeleportDistance / tpSpeed, Enum.EasingStyle.Linear)
+            local tween = TweenService:Create(LocalPlayer.Character.HumanoidRootPart, tweenInfo, {CFrame = CFrame.new(stepPos)})
+            tween:Play()
+            tween.Completed:Wait()
+            SimulateHumanBehavior() -- Giả lập hành vi giữa các bước
+        end
+    else
+        local tweenInfo = TweenInfo.new(distance / tpSpeed, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(LocalPlayer.Character.HumanoidRootPart, tweenInfo, {CFrame = CFrame.new(finalPos)})
+        tween:Play()
+        tween.Completed:Wait()
+    end
+    
+    CombatState.LastTeleportTime = tick()
+end
+
+-- Hàm giả lập ping
+local function SpoofPing()
+    local fakePing = math.random(CombatConfig.AntiBan.FakePing.Min, CombatConfig.AntiBan.FakePing.Max)
+    wait(fakePing / 1000) -- Giả lập độ trễ mạng
+end
+
+-- Hàm kiểm tra hành động để tránh vượt giới hạn
+local function CanPerformAction()
+    if tick() - CombatState.LastActionTime < CombatConfig.AntiBan.ActionCooldown then return false end
+    CombatState.ActionCount = CombatState.ActionCount + 1
+    if CombatState.ActionCount > CombatConfig.AntiBan.MaxActionsPerSecond then
+        wait(1) -- Đợi nếu vượt quá giới hạn hành động
+        CombatState.ActionCount = 0
+    end
+    CombatState.LastActionTime = tick()
+    return true
+end
+
+-- Hàm spoof vị trí để tránh check server
+local function SpoofPosition()
+    if not IsCharacterReady() then return end
+    local rootPart = LocalPlayer.Character.HumanoidRootPart
+    local originalPos = rootPart.Position
+    rootPart.Velocity = CombatConfig.AntiBan.SpoofVelocity
+    rootPart.CFrame = CFrame.new(originalPos + Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)))
+    wait(0.01)
+    rootPart.CFrame = CFrame.new(originalPos)
+end
+
+-- Hàm thực hiện skill với anti-ban
+local function ExecuteSkill(skillName)
+    if not CanPerformAction() or not IsSkillReady(skillName) then return false end
+    local skillData = CombatConfig.SkillSettings[skillName]
+    SpoofPing()
+    SimulateHumanBehavior()
+    local success, error = pcall(function()
+        ReplicatedStorage.Remotes.Skill:FireServer(skillName)
+    end)
+    if success then
+        CombatState.LastSkillUsed = skillName
+        CombatState.TotalDamageDealt = CombatState.TotalDamageDealt + skillData.Damage
+        return true
+    else
+        warn("Skill failed: " .. error)
+        return false
+    end
+end
+
+-- Hàm thực hiện combo với anti-ban
+local function ExecuteCombo(mode)
+    if CombatState.ComboInProgress then return end
+    CombatState.ComboInProgress = true
+    local combo = CombatConfig.ComboModes[mode]
+    for _, skillName in ipairs(combo) do
+        if IsCharacterReady() and ExecuteSkill(skillName) then
+            wait(CombatConfig.SkillSettings[skillName].Delay + math.random(CombatConfig.AntiBan.RandomDelayMin, CombatConfig.AntiBan.RandomDelayMax))
+        else
+            wait(0.1)
+        end
+    end
+    CombatState.ComboInProgress = false
+end
+
+-- Hàm đánh thường với anti-ban
+local function PerformBasicAttack()
+    if not CanPerformAction() or not IsCharacterReady() then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    local success, error = pcall(function()
+        VirtualUser:ClickButton1(Vector2.new(LocalPlayer:GetMouse().X, LocalPlayer:GetMouse().Y))
+    end)
+    if success then
+        CombatState.TotalDamageDealt = CombatState.TotalDamageDealt + CombatConfig.WeaponSettings[CombatState.CurrentWeapon].Damage
+    end
+    wait(CombatConfig.BasicAttackDelay)
+end
+
+-- Hàm đổi vũ khí với anti-ban
+local function SwitchWeapon(weaponName)
+    if not CanPerformAction() or tick() - CombatState.LastWeaponSwitch < CombatConfig.WeaponSwitchDelay then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    local success, error = pcall(function()
+        ReplicatedStorage.Remotes.Equip:FireServer(weaponName)
+    end)
+    if success then
+        CombatState.CurrentWeapon = weaponName
+        CombatState.LastWeaponSwitch = tick()
+    end
+end
+
+-- Hàm bật buff với anti-ban
+local function EnableCombatBuffs()
+    if not CanPerformAction() then return end
+    SpoofPing()
+    if not CombatConfig.AuraEnabled then
+        pcall(function() ReplicatedStorage.Remotes.Aura:FireServer(true) end)
+        CombatConfig.AuraEnabled = true
+    end
+    if not CombatConfig.InstinctEnabled then
+        pcall(function() ReplicatedStorage.Remotes.Instinct:FireServer(true) end)
+        CombatConfig.InstinctEnabled = true
+    end
+    if not CombatConfig.PvPEnabled then
+        pcall(function() ReplicatedStorage.Remotes.PvP:FireServer(true) end)
+        CombatConfig.PvPEnabled = true
+    end
+end
+
+-- Vòng lặp chính với anti-ban
+local function CombatMainLoop()
+    while wait(0.05 + math.random(CombatConfig.AntiBan.RandomDelayMin, CombatConfig.AntiBan.RandomDelayMax)) do
+        if not IsCharacterReady() then
+            wait(1)
+            continue
+        end
+        
+        EnableCombatBuffs()
+        local target = FindNearestPlayer()
+        if target then
+            CombatState.TargetLocked = target
+            local distance = CalculateDistance(LocalPlayer.Character.HumanoidRootPart.Position, target.Character.HumanoidRootPart.Position)
+            if distance > CombatConfig.MaxAttackRange then
+                SafeTeleportToTarget(target, "behind", CombatConfig.TeleportSpeed)
+            elseif distance < CombatConfig.MinAttackRange then
+                SafeTeleportToTarget(target, "above", CombatConfig.TeleportSpeedSlow)
+            end
+            CombatState.ComboMode = "Standard" -- Có thể mở rộng thêm logic chọn combo
+            if not CombatState.ComboInProgress then
+                ExecuteCombo(CombatState.ComboMode)
+            end
+            if not LocalPlayer.Character:FindFirstChild("SkillCooldown") then
+                PerformBasicAttack()
+            end
+            SwitchWeapon(CombatConfig.WeaponSettings[CombatState.CurrentWeapon == "Melee" and "Sword" or CombatState.CurrentWeapon == "Sword" and "Fruit" or CombatState.CurrentWeapon == "Fruit" and "Gun" or "Melee"].Name)
+        else
+            SimulateHumanBehavior()
+        end
+    end
+end
+
+-- Chạy script với anti-ban
+spawn(function()
+    local success, error = pcall(CombatMainLoop)
+    if not success then
+        warn("Combat loop crashed: " .. error)
+        wait(2)
+        CombatMainLoop()
+    end
+end)
+
+-- Thread spoof vị trí định kỳ
+spawn(function()
+    while wait(CombatConfig.AntiBan.SpoofPositionInterval) do
+        SpoofPosition()
+    end
+end)
+
+-- Dịch vụ cần thiết từ Roblox
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+
+-- Danh sách vùng an toàn (Safe Zones)
+local SafeZones = {"SafeZone1", "SafeZone2", "SpawnIsland"} -- Thay bằng tên thực trong game
+
+-- Bảng cấu hình chi tiết (bao gồm Anti-Ban)
+local TargetConfig = {
+    -- Điều kiện chọn target
+    MaxTargetRange = 100,
+    MinTargetRange = 5,
+    BountyPriorityMultiplier = 0.5,
+    HealthThreshold = 0.1,
+    PvPCheckInterval = 1,
+    TargetSwitchDelay = 2,
+    
+    -- Logic đổi target
+    NoDamageTimeout = 30,
+    NoKillTimeout = 45,
+    ServerSwitchThreshold = 10,
+    
+    -- AFK Mode
+    AFKWeaponSwitchInterval = 5,
+    AFKRandomMoveInterval = 10,
+    
+    -- Trạng thái
+    CurrentTarget = nil,
+    LastTargetSwitch = tick(),
+    LastDamageTime = tick(),
+    LastKillTime = tick(),
+    IsAFK = false,
+    PvPEnabled = false,
+    
+    -- Cấu hình Anti-Ban
+    AntiBan = {
+        RandomDelayMin = 0.05, -- Delay ngẫu nhiên tối thiểu
+        RandomDelayMax = 0.2, -- Delay ngẫu nhiên tối đa
+        FakeWalkSpeed = 16, -- Tốc độ giả lập đi bộ
+        FakePing = {Min = 50, Max = 150}, -- Giả lập ping
+        ActionCooldown = 0.1, -- Delay giữa các hành động
+        MaxActionsPerSecond = 8, -- Giới hạn hành động mỗi giây
+        SpoofPositionInterval = 5, -- Spoof vị trí định kỳ
+        SpoofVelocity = Vector3.new(0, 0, 0), -- Giả lập vận tốc
+        TargetCheckDelay = 0.5, -- Delay khi kiểm tra target để tránh spam
+        ServerSwitchRandomDelay = {Min = 5, Max = 15} -- Delay ngẫu nhiên khi đổi server
+    }
+}
+
+-- Biến lưu trữ trạng thái
+local TrackingState = {
+    TargetHistory = {},
+    KillCount = 0,
+    ServerPlayerCount = 0,
+    LastServerCheck = tick(),
+    AFKStartTime = nil,
+    LastActionTime = tick(),
+    ActionCount = 0
+}
+
+-- Hàm kiểm tra nhân vật
+local function IsCharacterReady()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or LocalPlayer.Character.Humanoid.Health <= 0 then
+        return false
+    end
+    return true
+end
+
+-- Hàm tính khoảng cách
+local function CalculateDistance(pos1, pos2)
+    return (pos1 - pos2).Magnitude
+end
+
+-- Hàm giả lập hành vi người chơi
+local function SimulateHumanBehavior()
+    local randomAction = math.random(1, 4)
+    if randomAction == 1 then
+        LocalPlayer.Character.Humanoid:Move(Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)), false)
+    elseif randomAction == 2 then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    elseif randomAction == 3 then
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new())
+        wait(0.05)
+        VirtualUser:Button1Up(Vector2.new())
+    elseif randomAction == 4 then
+        LocalPlayer.Character.Humanoid.Jump = true
+    end
+    wait(math.random(TargetConfig.AntiBan.RandomDelayMin, TargetConfig.AntiBan.RandomDelayMax))
+end
+
+-- Hàm kiểm tra hành động để tránh vượt giới hạn
+local function CanPerformAction()
+    if tick() - TrackingState.LastActionTime < TargetConfig.AntiBan.ActionCooldown then return false end
+    TrackingState.ActionCount = TrackingState.ActionCount + 1
+    if TrackingState.ActionCount > TargetConfig.AntiBan.MaxActionsPerSecond then
+        wait(1)
+        TrackingState.ActionCount = 0
+    end
+    TrackingState.LastActionTime = tick()
+    return true
+end
+
+-- Hàm giả lập ping
+local function SpoofPing()
+    local fakePing = math.random(TargetConfig.AntiBan.FakePing.Min, TargetConfig.AntiBan.FakePing.Max)
+    wait(fakePing / 1000)
+end
+
+-- Hàm spoof vị trí
+local function SpoofPosition()
+    if not IsCharacterReady() then return end
+    local rootPart = LocalPlayer.Character.HumanoidRootPart
+    local originalPos = rootPart.Position
+    rootPart.Velocity = TargetConfig.AntiBan.SpoofVelocity
+    rootPart.CFrame = CFrame.new(originalPos + Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)))
+    wait(0.01)
+    rootPart.CFrame = CFrame.new(originalPos)
+end
+
+-- Hàm kiểm tra target hợp lệ với anti-ban
+local function IsValidTarget(target)
+    if not CanPerformAction() then return false, "Action on cooldown" end
+    SpoofPing()
+    SimulateHumanBehavior()
+    
+    if not target or not target.Character or not target.Character:FindFirstChild("Humanoid") or not target.Character:FindFirstChild("HumanoidRootPart") then
+        return false, "Target missing components"
+    end
+    
+    local humanoid = target.Character.Humanoid
+    if humanoid.Health <= 0 then
+        return false, "Target is dead"
+    end
+    
+    if humanoid.Health / humanoid.MaxHealth < TargetConfig.HealthThreshold then
+        return false, "Target health too low"
+    end
+    
+    if not target:FindFirstChild("PvP") or not target.PvP.Value then
+        return false, "Target PvP disabled"
+    end
+    
+    for _, zone in pairs(SafeZones) do
+        if target.Character:FindFirstChild(zone) then
+            return false, "Target in safe zone: " .. zone
+        end
+    end
+    
+    local distance = CalculateDistance(LocalPlayer.Character.HumanoidRootPart.Position, target.Character.HumanoidRootPart.Position)
+    if distance > TargetConfig.MaxTargetRange then
+        return false, "Target out of range"
+    end
+    
+    local targetIsland = target.Character:FindFirstChild("CurrentIsland")
+    local playerIsland = LocalPlayer.Character:FindFirstChild("CurrentIsland")
+    if targetIsland and playerIsland and targetIsland.Value ~= playerIsland.Value then
+        return false, "Target on different island"
+    end
+    
+    return true, "Target valid"
+end
+
+-- Hàm chọn target mới với anti-ban
+local function SelectNewTarget()
+    if not CanPerformAction() or tick() - TargetConfig.LastTargetSwitch < TargetConfig.TargetSwitchDelay then
+        return TargetConfig.CurrentTarget
+    end
+    
+    SpoofPing()
+    SimulateHumanBehavior()
+    wait(TargetConfig.AntiBan.TargetCheckDelay)
+    
+    local bestTarget = nil
+    local bestScore = -math.huge
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and not TrackingState.TargetHistory[player.Name] then
+            local isValid, reason = IsValidTarget(player)
+            if isValid then
+                local distance = CalculateDistance(LocalPlayer.Character.HumanoidRootPart.Position, player.Character.HumanoidRootPart.Position)
+                local bounty = player.leaderstats and player.leaderstats.Bounty.Value or 0
+                local score = (bounty * TargetConfig.BountyPriorityMultiplier) - distance
+                if score > bestScore then
+                    bestScore = score
+                    bestTarget = player
+                end
+            end
+        end
+    end
+    
+    if bestTarget then
+        TargetConfig.CurrentTarget = bestTarget
+        TrackingState.TargetHistory[bestTarget.Name] = tick()
+        TargetConfig.LastTargetSwitch = tick()
+        print("New target: " .. bestTarget.Name)
+    else
+        TargetConfig.CurrentTarget = nil
+    end
+    
+    return TargetConfig.CurrentTarget
+end
+
+-- Hàm kiểm tra và đổi target
+local function CheckAndSwitchTarget()
+    local currentTarget = TargetConfig.CurrentTarget
+    if not currentTarget then
+        return SelectNewTarget()
+    end
+    
+    local isValid, reason = IsValidTarget(currentTarget)
+    if not isValid then
+        print("Switching target: " .. reason)
+        return SelectNewTarget()
+    end
+    
+    if tick() - TargetConfig.LastDamageTime > TargetConfig.NoDamageTimeout then
+        print("Switching target: No damage in " .. TargetConfig.NoDamageTimeout .. "s")
+        return SelectNewTarget()
+    end
+    
+    if tick() - TargetConfig.LastKillTime > TargetConfig.NoKillTimeout then
+        print("Switching target: No kill in " .. TargetConfig.NoKillTimeout .. "s")
+        return SelectNewTarget()
+    end
+    
+    if LocalPlayer.Character.Humanoid.Health <= 0 then
+        print("Switching target: Player died")
+        return SelectNewTarget()
+    end
+    
+    return currentTarget
+end
+
+-- Hàm đếm số người chơi
+local function UpdateServerPlayerCount()
+    if not CanPerformAction() then return end
+    SpoofPing()
+    TrackingState.ServerPlayerCount = #Players:GetPlayers() - 1
+    TrackingState.LastServerCheck = tick()
+end
+
+-- Hàm đổi server với anti-ban
+local function SwitchServer()
+    if not CanPerformAction() then return end
+    if tick() - TrackingState.LastServerCheck > TargetConfig.ServerSwitchThreshold and TrackingState.ServerPlayerCount == 0 then
+        print("Switching server...")
+        SpoofPing()
+        SimulateHumanBehavior()
+        wait(math.random(TargetConfig.AntiBan.ServerSwitchRandomDelay.Min, TargetConfig.AntiBan.ServerSwitchRandomDelay.Max))
+        local success, error = pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId)
+        end)
+        if not success then
+            warn("Server switch failed: " .. error)
+        end
+    end
+end
+
+-- Hàm bật PvP với anti-ban
+local function EnablePvP()
+    if not CanPerformAction() or TargetConfig.PvPEnabled then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    local success, error = pcall(function()
+        ReplicatedStorage.Remotes.PvP:FireServer(true)
+    end)
+    if success then
+        TargetConfig.PvPEnabled = true
+    end
+end
+
+-- Hàm AFK Mode với anti-ban
+local function AFKMode()
+    if not TrackingState.IsAFK then
+        TrackingState.IsAFK = true
+        TrackingState.AFKStartTime = tick()
+        print("Entering AFK Mode")
+    end
+    
+    spawn(function()
+        while TrackingState.IsAFK and wait(TargetConfig.AFKWeaponSwitchInterval + math.random(TargetConfig.AntiBan.RandomDelayMin, TargetConfig.AntiBan.RandomDelayMax)) do
+            if CanPerformAction() then
+                local weapons = {"Melee", "Sword", "Fruit", "Gun"}
+                local randomWeapon = weapons[math.random(1, #weapons)]
+                SpoofPing()
+                SimulateHumanBehavior()
+                pcall(function()
+                    ReplicatedStorage.Remotes.Equip:FireServer(randomWeapon)
+                end)
+            end
+        end
+    end)
+    
+    spawn(function()
+        while TrackingState.IsAFK and wait(TargetConfig.AFKRandomMoveInterval + math.random(TargetConfig.AntiBan.RandomDelayMin, TargetConfig.AntiBan.RandomDelayMax)) do
+            if IsCharacterReady() and CanPerformAction() then
+                SpoofPing()
+                LocalPlayer.Character.Humanoid:Move(Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)), false)
+            end
+        end
+    end)
+end
+
+-- Hàm thoát AFK Mode
+local function ExitAFKMode()
+    if TrackingState.IsAFK then
+        TrackingState.IsAFK = false
+        print("Exiting AFK Mode after " .. math.floor(tick() - TrackingState.AFKStartTime) .. "s")
+        TrackingState.AFKStartTime = nil
+    end
+end
+
+-- Xử lý hồi sinh
+LocalPlayer.CharacterAdded:Connect(function()
+    wait(1 + math.random(TargetConfig.AntiBan.RandomDelayMin, TargetConfig.AntiBan.RandomDelayMax))
+    EnablePvP()
+    TargetConfig.CurrentTarget = nil
+end)
+
+-- Hàm log trạng thái
+local function LogTrackingStatus()
+    if not CanPerformAction() then return end
+    SpoofPing()
+    local log = {
+        Timestamp = os.date("%H:%M:%S"),
+        CurrentTarget = TargetConfig.CurrentTarget and TargetConfig.CurrentTarget.Name or "None",
+        KillCount = TrackingState.KillCount,
+        ServerPlayerCount = TrackingState.ServerPlayerCount,
+        LastDamageTime = math.floor(tick() - TargetConfig.LastDamageTime),
+        LastKillTime = math.floor(tick() - TargetConfig.LastKillTime),
+        IsAFK = TrackingState.IsAFK
+    }
+    print(HttpService:JSONEncode(log))
+end
+
+-- Vòng lặp chính với anti-ban
+local function TargetTrackingLoop()
+    while wait(0.1 + math.random(TargetConfig.AntiBan.RandomDelayMin, TargetConfig.AntiBan.RandomDelayMax)) do
+        if not IsCharacterReady() then
+            wait(1)
+            continue
+        end
+        
+        EnablePvP()
+        UpdateServerPlayerCount()
+        
+        local target = CheckAndSwitchTarget()
+        if target then
+            ExitAFKMode()
+        else
+            AFKMode()
+            SwitchServer()
+        end
+        
+        LogTrackingStatus()
+    end
+end
+
+-- Chạy vòng lặp
+spawn(function()
+    local success, error = pcall(TargetTrackingLoop)
+    if not success then
+        warn("Target tracking loop crashed: " .. error)
+        wait(2)
+        TargetTrackingLoop()
+    end
+end)
+
+-- Thread spoof vị trí
+spawn(function()
+    while wait(TargetConfig.AntiBan.SpoofPositionInterval) do
+        SpoofPosition()
+    end
+end)
+
+-- Giả lập damage/kill (tích hợp với Part 1)
+spawn(function()
+    while wait(1 + math.random(TargetConfig.AntiBan.RandomDelayMin, TargetConfig.AntiBan.RandomDelayMax)) do
+        if TargetConfig.CurrentTarget and math.random() > 0.5 then
+            TargetConfig.LastDamageTime = tick()
+        end
+        if TargetConfig.CurrentTarget and math.random() > 0.9 then
+            TargetConfig.LastKillTime = tick()
+            TrackingState.KillCount = TrackingState.KillCount + 1
+            TargetConfig.CurrentTarget = nil
+        end
+    end
+end)
+
+-- Dịch vụ cần thiết từ Roblox
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
+
+-- Bảng cấu hình chi tiết (bao gồm Anti-Ban)
+local MoveSupportConfig = {
+    -- Fly Settings
+    FlySpeed = 50,
+    FlyHeight = 100,
+    FlyThroughWall = true,
+    FlyAvoidSeaDamage = true,
+    
+    -- Water/Lava Walk
+    WaterWalkHeight = 1,
+    LavaWalkHeight = 2,
+    
+    -- Avoid Skill
+    AvoidSkillRange = 10,
+    AvoidSkillHeight = 20,
+    AvoidSkillCooldown = 1,
+    
+    -- Target Switch Logic
+    NoDamageTimeout = 30,
+    NoKillTimeout = 45,
+    TargetSwitchDelay = 2,
+    
+    -- Health Logic
+    LowHealthThreshold = 0.1, -- 10% máu thì né
+    SafeHealthThreshold = 0.3, -- 30% máu thì quay lại
+    SafeHeight = 50,
+    
+    -- Sea Beast Summon
+    BountyThreshold = 10000000, -- 10M bounty để summon
+    SeaBeastSummonInterval = 60, -- Summon mỗi 60s nếu đủ điều kiện
+    
+    -- Team Config
+    PreferredTeam = "Pirate", -- "Pirate" hoặc "Marine"
+    
+    -- Anti-Ban
+    AntiBan = {
+        RandomDelayMin = 0.05,
+        RandomDelayMax = 0.2,
+        FakeWalkSpeed = 16,
+        FakePing = {Min = 50, Max = 150},
+        ActionCooldown = 0.1,
+        MaxActionsPerSecond = 8,
+        SpoofPositionInterval = 5,
+        SpoofVelocity = Vector3.new(0, 0, 0),
+        FlyStepDistance = 20, -- Chia nhỏ quãng đường bay để tránh phát hiện
+        MoveRandomness = 0.5 -- Độ ngẫu nhiên khi di chuyển
+    }
+}
+
+-- Biến lưu trữ trạng thái
+local MoveSupportState = {
+    IsFlying = false,
+    LastAvoidTime = tick(),
+    LastTargetSwitch = tick(),
+    LastDamageTime = tick(),
+    LastKillTime = tick(),
+    IsLowHealth = false,
+    LastSeaBeastSummon = tick(),
+    ActionCount = 0,
+    LastActionTime = tick()
+}
+
+-- Hàm kiểm tra nhân vật
+local function IsCharacterReady()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or LocalPlayer.Character.Humanoid.Health <= 0 then
+        return false
+    end
+    return true
+end
+
+-- Hàm tính khoảng cách
+local function CalculateDistance(pos1, pos2)
+    return (pos1 - pos2).Magnitude
+end
+
+-- Hàm giả lập hành vi người chơi
+local function SimulateHumanBehavior()
+    local randomAction = math.random(1, 4)
+    if randomAction == 1 then
+        LocalPlayer.Character.Humanoid:Move(Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)), false)
+    elseif randomAction == 2 then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    elseif randomAction == 3 then
+        VirtualUser:Button1Down(Vector2.new())
+        wait(0.05)
+        VirtualUser:Button1Up(Vector2.new())
+    elseif randomAction == 4 then
+        LocalPlayer.Character.Humanoid.Jump = true
+    end
+    wait(math.random(MoveSupportConfig.AntiBan.RandomDelayMin, MoveSupportConfig.AntiBan.RandomDelayMax))
+end
+
+-- Hàm kiểm tra hành động
+local function CanPerformAction()
+    if tick() - MoveSupportState.LastActionTime < MoveSupportConfig.AntiBan.ActionCooldown then return false end
+    MoveSupportState.ActionCount = MoveSupportState.ActionCount + 1
+    if MoveSupportState.ActionCount > MoveSupportConfig.AntiBan.MaxActionsPerSecond then
+        wait(1)
+        MoveSupportState.ActionCount = 0
+    end
+    MoveSupportState.LastActionTime = tick()
+    return true
+end
+
+-- Hàm giả lập ping
+local function SpoofPing()
+    local fakePing = math.random(MoveSupportConfig.AntiBan.FakePing.Min, MoveSupportConfig.AntiBan.FakePing.Max)
+    wait(fakePing / 1000)
+end
+
+-- Hàm spoof vị trí
+local function SpoofPosition()
+    if not IsCharacterReady() then return end
+    local rootPart = LocalPlayer.Character.HumanoidRootPart
+    local originalPos = rootPart.Position
+    rootPart.Velocity = MoveSupportConfig.AntiBan.SpoofVelocity
+    rootPart.CFrame = CFrame.new(originalPos + Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)))
+    wait(0.01)
+    rootPart.CFrame = CFrame.new(originalPos)
+end
+
+-- Hàm bay an toàn
+local function SafeFly(targetPos)
+    if not CanPerformAction() or not IsCharacterReady() then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    
+    MoveSupportState.IsFlying = true
+    local currentPos = LocalPlayer.Character.HumanoidRootPart.Position
+    local distance = CalculateDistance(currentPos, targetPos)
+    
+    if distance > MoveSupportConfig.AntiBan.FlyStepDistance then
+        local steps = math.ceil(distance / MoveSupportConfig.AntiBan.FlyStepDistance)
+        local stepVector = (targetPos - currentPos) / steps
+        for i = 1, steps do
+            local stepPos = currentPos + stepVector * i + Vector3.new(math.random(-MoveSupportConfig.AntiBan.MoveRandomness, MoveSupportConfig.AntiBan.MoveRandomness), 0, math.random(-MoveSupportConfig.AntiBan.MoveRandomness, MoveSupportConfig.AntiBan.MoveRandomness))
+            local tweenInfo = TweenInfo.new(MoveSupportConfig.AntiBan.FlyStepDistance / MoveSupportConfig.FlySpeed, Enum.EasingStyle.Linear)
+            local tween = TweenService:Create(LocalPlayer.Character.HumanoidRootPart, tweenInfo, {CFrame = CFrame.new(stepPos)})
+            tween:Play()
+            tween.Completed:Wait()
+            SimulateHumanBehavior()
+        end
+    else
+        local tweenInfo = TweenInfo.new(distance / MoveSupportConfig.FlySpeed, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(LocalPlayer.Character.HumanoidRootPart, tweenInfo, {CFrame = CFrame.new(targetPos)})
+        tween:Play()
+        tween.Completed:Wait()
+    end
+    
+    LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Flying)
+end
+
+-- Hàm bật fly với chống biển
+local function EnableFly(target)
+    if not CanPerformAction() or MoveSupportState.IsFlying then return end
+    SpoofPing()
+    
+    local flyPos = target and target.Character.HumanoidRootPart.Position + Vector3.new(0, MoveSupportConfig.FlyHeight, 0) or LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, MoveSupportConfig.FlyHeight, 0)
+    if MoveSupportConfig.FlyAvoidSeaDamage then
+        flyPos = flyPos + Vector3.new(0, 10, 0) -- Tránh biển thêm 10 studs
+    end
+    SafeFly(flyPos)
+end
+
+-- Hàm đi trên nước/lava
+local function WaterLavaWalk()
+    if not CanPerformAction() or not IsCharacterReady() then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    
+    local rootPart = LocalPlayer.Character.HumanoidRootPart
+    local ray = Ray.new(rootPart.Position, Vector3.new(0, -10, 0))
+    local hit, pos = workspace:FindPartOnRay(ray, LocalPlayer.Character)
+    
+    if hit and (hit.Name:lower():match("water") or hit.Name:lower():match("lava")) then
+        local height = hit.Name:lower():match("water") and MoveSupportConfig.WaterWalkHeight or MoveSupportConfig.LavaWalkHeight
+        rootPart.Velocity = Vector3.new(rootPart.Velocity.X, height, rootPart.Velocity.Z)
+    end
+end
+
+-- Hàm tránh skill
+local function AvoidSkill()
+    if not CanPerformAction() or tick() - MoveSupportState.LastAvoidTime < MoveSupportConfig.AvoidSkillCooldown then return end
+    SpoofPing()
+    
+    local projectiles = workspace:FindFirstChild("Projectiles")
+    if projectiles then
+        for _, proj in pairs(projectiles:GetChildren()) do
+            if CalculateDistance(proj.Position, LocalPlayer.Character.HumanoidRootPart.Position) < MoveSupportConfig.AvoidSkillRange then
+                SafeFly(LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, MoveSupportConfig.AvoidSkillHeight, 0))
+                MoveSupportState.LastAvoidTime = tick()
+                print("Avoided skill!")
+                return
+            end
+        end
+    end
+end
+
+-- Hàm chọn target mới (giả định kết nối với Part 2)
+local function SelectNewTarget()
+    if not CanPerformAction() or tick() - MoveSupportState.LastTargetSwitch < MoveSupportConfig.TargetSwitchDelay then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    -- Logic đơn giản, có thể kết nối với Part 2
+    local target = nil
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character.Humanoid.Health > 0 then
+            target = player
+            break
+        end
+    end
+    MoveSupportState.LastTargetSwitch = tick()
+    return target
+end
+
+-- Hàm xử lý logic đổi target
+local function HandleTargetSwitch(target)
+    if not CanPerformAction() then return target end
+    SpoofPing()
+    
+    if not target or not target.Character or target.Character.Humanoid.Health <= 0 then
+        return SelectNewTarget()
+    end
+    
+    if tick() - MoveSupportState.LastDamageTime > MoveSupportConfig.NoDamageTimeout then
+        return SelectNewTarget()
+    end
+    
+    if tick() - MoveSupportState.LastKillTime > MoveSupportConfig.NoKillTimeout then
+        return SelectNewTarget()
+    end
+    
+    return target
+end
+
+-- Hàm xử lý máu thấp
+local function HandleLowHealth()
+    if not CanPerformAction() or not IsCharacterReady() then return end
+    SpoofPing()
+    
+    local healthPercent = LocalPlayer.Character.Humanoid.Health / LocalPlayer.Character.Humanoid.MaxHealth
+    if healthPercent < MoveSupportConfig.LowHealthThreshold and not MoveSupportState.IsLowHealth then
+        SafeFly(LocalPlayer.Character.HumanoidRootPart.Position + Vector3.new(0, MoveSupportConfig.SafeHeight, 0))
+        MoveSupportState.IsLowHealth = true
+        print("Low health, flying to safety!")
+    elseif healthPercent > MoveSupportConfig.SafeHealthThreshold and MoveSupportState.IsLowHealth then
+        MoveSupportState.IsLowHealth = false
+        print("Health recovered, resuming combat!")
+    end
+end
+
+-- Hàm summon Sea Beast
+local function SummonSeaBeast()
+    if not CanPerformAction() or tick() - MoveSupportState.LastSeaBeastSummon < MoveSupportConfig.SeaBeastSummonInterval then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    
+    local bounty = LocalPlayer.leaderstats and LocalPlayer.leaderstats.Bounty.Value or 0
+    if bounty >= MoveSupportConfig.BountyThreshold then
+        local success, error = pcall(function()
+            ReplicatedStorage.Remotes.SummonSeaBeast:FireServer()
+        end)
+        if success then
+            MoveSupportState.LastSeaBeastSummon = tick()
+            print("Summoned Sea Beast!")
+        else
+            warn("Failed to summon Sea Beast: " .. error)
+        end
+    end
+end
+
+-- Hàm chọn team
+local function SetTeam()
+    if not CanPerformAction() then return end
+    SpoofPing()
+    local success, error = pcall(function()
+        ReplicatedStorage.Remotes.SetTeam:FireServer(MoveSupportConfig.PreferredTeam)
+    end)
+    if success then
+        print("Joined team: " .. MoveSupportConfig.PreferredTeam)
+    end
+end
+
+-- Hàm log trạng thái
+local function LogMoveSupportStatus()
+    if not CanPerformAction() then return end
+    SpoofPing()
+    local log = {
+        Timestamp = os.date("%H:%M:%S"),
+        IsFlying = MoveSupportState.IsFlying,
+        IsLowHealth = MoveSupportState.IsLowHealth,
+        LastAvoidTime = math.floor(tick() - MoveSupportState.LastAvoidTime),
+        LastSeaBeastSummon = math.floor(tick() - MoveSupportState.LastSeaBeastSummon)
+    }
+    print(HttpService:JSONEncode(log))
+end
+
+-- Vòng lặp chính
+local function MoveSupportLoop()
+    local currentTarget = nil -- Giả định từ Part 2
+    while wait(0.1 + math.random(MoveSupportConfig.AntiBan.RandomDelayMin, MoveSupportConfig.AntiBan.RandomDelayMax)) do
+        if not IsCharacterReady() then
+            wait(1)
+            continue
+        end
+        
+        SetTeam()
+        EnableFly(currentTarget)
+        WaterLavaWalk()
+        AvoidSkill()
+        currentTarget = HandleTargetSwitch(currentTarget)
+        HandleLowHealth()
+        SummonSeaBeast()
+        LogMoveSupportStatus()
+    end
+end
+
+-- Chạy vòng lặp
+spawn(function()
+    local success, error = pcall(MoveSupportLoop)
+    if not success then
+        warn("Move support loop crashed: " .. error)
+        wait(2)
+        MoveSupportLoop()
+    end
+end)
+
+-- Thread spoof vị trí
+spawn(function()
+    while wait(MoveSupportConfig.AntiBan.SpoofPositionInterval) do
+        SpoofPosition()
+    end
+end)
+
+-- Giả lập damage/kill (tích hợp với Part 1/2)
+spawn(function()
+    while wait(1 + math.random(MoveSupportConfig.AntiBan.RandomDelayMin, MoveSupportConfig.AntiBan.RandomDelayMax)) do
+        if math.random() > 0.5 then
+            MoveSupportState.LastDamageTime = tick()
+        end
+        if math.random() > 0.9 then
+            MoveSupportState.LastKillTime = tick()
+        end
+    end
+end)
+
+-- Dịch vụ cần thiết từ Roblox
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+
+-- Bảng cấu hình
+local UIConfig = {
+    HubName = "Anura Hub",
+    ImageID = "rbxassetid://14190262721",
+    Size = UDim2.new(0, 500, 0, 1000),
+    RainbowCycleSpeed = 1, -- Tốc độ đổi màu
+    BorderFlashSpeed = 0.5, -- Tốc độ chớp nháy viền
+    UpdateInterval = 0.1, -- Cập nhật thông tin mỗi 0.1s
+    
+    -- Anti-Ban
+    AntiBan = {
+        RandomDelayMin = 0.05,
+        RandomDelayMax = 0.2,
+        FakePing = {Min = 50, Max = 150},
+        ActionCooldown = 0.1,
+        MaxActionsPerSecond = 8,
+        SpoofPositionInterval = 5,
+        SpoofVelocity = Vector3.new(0, 0, 0)
+    }
+}
+
+-- Biến lưu trữ trạng thái
+local UIState = {
+    StartTime = tick(),
+    TotalKills = 0,
+    TotalBounty = 0,
+    IsDragging = false,
+    DragStart = nil,
+    LastActionTime = tick(),
+    ActionCount = 0
+}
+
+-- Hàm kiểm tra nhân vật
+local function IsCharacterReady()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or LocalPlayer.Character.Humanoid.Health <= 0 then
+        return false
+    end
+    return true
+end
+
+-- Hàm giả lập hành vi người chơi
+local function SimulateHumanBehavior()
+    local randomAction = math.random(1, 4)
+    if randomAction == 1 then
+        LocalPlayer.Character.Humanoid:Move(Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)), false)
+    elseif randomAction == 2 then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    elseif randomAction == 3 then
+        VirtualUser:Button1Down(Vector2.new())
+        wait(0.05)
+        VirtualUser:Button1Up(Vector2.new())
+    elseif randomAction == 4 then
+        LocalPlayer.Character.Humanoid.Jump = true
+    end
+    wait(math.random(UIConfig.AntiBan.RandomDelayMin, UIConfig.AntiBan.RandomDelayMax))
+end
+
+-- Hàm kiểm tra hành động
+local function CanPerformAction()
+    if tick() - UIState.LastActionTime < UIConfig.AntiBan.ActionCooldown then return false end
+    UIState.ActionCount = UIState.ActionCount + 1
+    if UIState.ActionCount > UIConfig.AntiBan.MaxActionsPerSecond then
+        wait(1)
+        UIState.ActionCount = 0
+    end
+    UIState.LastActionTime = tick()
+    return true
+end
+
+-- Hàm giả lập ping
+local function SpoofPing()
+    local fakePing = math.random(UIConfig.AntiBan.FakePing.Min, UIConfig.AntiBan.FakePing.Max)
+    wait(fakePing / 1000)
+end
+
+-- Hàm spoof vị trí
+local function SpoofPosition()
+    if not IsCharacterReady() then return end
+    local rootPart = LocalPlayer.Character.HumanoidRootPart
+    local originalPos = rootPart.Position
+    rootPart.Velocity = UIConfig.AntiBan.SpoofVelocity
+    rootPart.CFrame = CFrame.new(originalPos + Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)))
+    wait(0.01)
+    rootPart.CFrame = CFrame.new(originalPos)
+end
+
+-- Tạo bảng điều khiển
+local function CreateControlPanel()
+    if not CanPerformAction() then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    ScreenGui.Name = "AnuraHub"
+    ScreenGui.ResetOnSpawn = false
+    
+    local Frame = Instance.new("Frame")
+    Frame.Size = UIConfig.Size
+    Frame.Position = UDim2.new(0.5, -250, 0.5, -500) -- Giữa màn hình
+    Frame.BackgroundTransparency = 0.2
+    Frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Frame.BorderSizePixel = 5
+    Frame.Parent = ScreenGui
+    
+    local ImageLabel = Instance.new("ImageLabel")
+    ImageLabel.Size = UDim2.new(1, 0, 0.4, 0)
+    ImageLabel.Position = UDim2.new(0, 0, 0, 0)
+    ImageLabel.Image = UIConfig.ImageID
+    ImageLabel.BackgroundTransparency = 1
+    ImageLabel.Parent = Frame
+    
+    local HubTitle = Instance.new("TextLabel")
+    HubTitle.Size = UDim2.new(1, 0, 0.1, 0)
+    HubTitle.Position = UDim2.new(0, 0, 0.4, 0)
+    HubTitle.Text = UIConfig.HubName
+    HubTitle.TextScaled = true
+    HubTitle.Font = Enum.Font.SourceSansBold
+    HubTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    HubTitle.BackgroundTransparency = 1
+    HubTitle.Parent = Frame
+    
+    local FPSText = Instance.new("TextLabel")
+    FPSText.Size = UDim2.new(1, 0, 0.1, 0)
+    FPSText.Position = UDim2.new(0, 0, 0.5, 0)
+    FPSText.Text = "FPS: 0"
+    FPSText.TextScaled = true
+    FPSText.Font = Enum.Font.SourceSans
+    FPSText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    FPSText.BackgroundTransparency = 1
+    FPSText.Parent = Frame
+    
+    local TimeText = Instance.new("TextLabel")
+    TimeText.Size = UDim2.new(1, 0, 0.1, 0)
+    TimeText.Position = UDim2.new(0, 0, 0.6, 0)
+    TimeText.Text = "Script Time: 0s"
+    TimeText.TextScaled = true
+    TimeText.Font = Enum.Font.SourceSans
+    TimeText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TimeText.BackgroundTransparency = 1
+    TimeText.Parent = Frame
+    
+    local KillsText = Instance.new("TextLabel")
+    KillsText.Size = UDim2.new(1, 0, 0.1, 0)
+    KillsText.Position = UDim2.new(0, 0, 0.7, 0)
+    KillsText.Text = "Total Kills: 0"
+    KillsText.TextScaled = true
+    KillsText.Font = Enum.Font.SourceSans
+    KillsText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    KillsText.BackgroundTransparency = 1
+    KillsText.Parent = Frame
+    
+    local BountyText = Instance.new("TextLabel")
+    BountyText.Size = UDim2.new(1, 0, 0.1, 0)
+    BountyText.Position = UDim2.new(0, 0, 0.8, 0)
+    BountyText.Text = "Total Bounty: 0"
+    BountyText.TextScaled = true
+    BountyText.Font = Enum.Font.SourceSans
+    BountyText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    BountyText.BackgroundTransparency = 1
+    BountyText.Parent = Frame
+    
+    return Frame, HubTitle, FPSText, TimeText, KillsText, BountyText
+end
+
+-- Hàm tạo hiệu ứng rainbow cho text
+local function RainbowText(label)
+    spawn(function()
+        while wait(UIConfig.RainbowCycleSpeed / 7) do
+            if not CanPerformAction() then continue end
+            SpoofPing()
+            local time = tick()
+            local r = math.sin(time) * 127 + 128
+            local g = math.sin(time + 2) * 127 + 128
+            local b = math.sin(time + 4) * 127 + 128
+            label.TextColor3 = Color3.fromRGB(r, g, b)
+        end
+    end)
+end
+
+-- Hàm tạo viền xanh-đỏ chớp nháy
+local function FlashBorder(frame)
+    spawn(function()
+        while wait(UIConfig.BorderFlashSpeed) do
+            if not CanPerformAction() then continue end
+            SpoofPing()
+            frame.BorderColor3 = frame.BorderColor3 == Color3.fromRGB(0, 0, 255) and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 0, 255)
+        end
+    end)
+end
+
+-- Hàm di chuyển bảng điều khiển
+local function EnableDragging(frame)
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and CanPerformAction() then
+            UIState.IsDragging = true
+            UIState.DragStart = input.Position - Vector2.new(frame.Position.X.Offset, frame.Position.Y.Offset)
+        end
+    end)
+    
+    frame.InputChanged:Connect(function(input)
+        if UIState.IsDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            SpoofPing()
+            local delta = input.Position - UIState.DragStart
+            frame.Position = UDim2.new(0, delta.X, 0, delta.Y)
+        end
+    end)
+    
+    frame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            UIState.IsDragging = false
+        end
+    end)
+end
+
+-- Hàm tính FPS
+local function CalculateFPS()
+    local lastTime = tick()
+    local frameCount = 0
+    return function()
+        frameCount = frameCount + 1
+        if tick() - lastTime >= 1 then
+            local fps = frameCount
+            frameCount = 0
+            lastTime = tick()
+            return fps
+        end
+        return nil
+    end
+end
+local GetFPS = CalculateFPS()
+
+-- Hàm cập nhật thông tin
+local function UpdateUI(frame, title, fpsText, timeText, killsText, bountyText)
+    RainbowText(title)
+    FlashBorder(frame)
+    EnableDragging(frame)
+    
+    spawn(function()
+        while wait(UIConfig.UpdateInterval + math.random(UIConfig.AntiBan.RandomDelayMin, UIConfig.AntiBan.RandomDelayMax)) do
+            if not CanPerformAction() then continue end
+            SpoofPing()
+            SimulateHumanBehavior()
+            
+            local fps = GetFPS()
+            if fps then fpsText.Text = "FPS: " .. fps end
+            timeText.Text = "Script Time: " .. math.floor(tick() - UIState.StartTime) .. "s"
+            killsText.Text = "Total Kills: " .. UIState.TotalKills
+            bountyText.Text = "Total Bounty: " .. UIState.TotalBounty
+        end
+    end)
+end
+
+-- Hàm chính
+local function InitializeUI()
+    local frame, title, fpsText, timeText, killsText, bountyText = CreateControlPanel()
+    UpdateUI(frame, title, fpsText, timeText, killsText, bountyText)
+end
+
+-- Chạy UI
+spawn(function()
+    local success, error = pcall(InitializeUI)
+    if not success then
+        warn("UI initialization failed: " .. error)
+        wait(2)
+        InitializeUI()
+    end
+end)
+
+-- Thread spoof vị trí
+spawn(function()
+    while wait(UIConfig.AntiBan.SpoofPositionInterval) do
+        SpoofPosition()
+    end
+end)
+
+-- Giả lập kills/bounty (tích hợp với Part 1/2/3)
+spawn(function()
+    while wait(1 + math.random(UIConfig.AntiBan.RandomDelayMin, UIConfig.AntiBan.RandomDelayMax)) do
+        if math.random() > 0.9 then
+            UIState.TotalKills = UIState.TotalKills + 1
+            UIState.TotalBounty = UIState.TotalBounty + math.random(10000, 50000)
+        end
+    end
+end)
+
+-- Dịch vụ cần thiết từ Roblox
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
+
+-- Bảng cấu hình
+local AntiConfig = {
+    -- FPS Boost
+    RemoveObjects = {"Tree", "Bush", "Grass", "Cloud", "Effect", "Particle", "Decoration"}, -- Đối tượng sẽ bị xóa
+    DisableEffects = true, -- Tắt hiệu ứng ánh sáng
+    LowerGraphics = true, -- Giảm chất lượng đồ họa
+    RemoveShadows = true, -- Tắt bóng
+    ClearInterval = 10, -- Xóa định kỳ mỗi 10s
+    
+    -- Fix Stuck
+    StuckCheckInterval = 5,
+    StuckThreshold = 1, -- Tốc độ < 1 studs/s coi là stuck
+    UnstuckHeight = 10,
+    
+    -- Anti-Ban
+    AntiBan = {
+        RandomDelayMin = 0.05,
+        RandomDelayMax = 0.2,
+        FakeWalkSpeed = 16,
+        FakePing = {Min = 50, Max = 150},
+        ActionCooldown = 0.1,
+        MaxActionsPerSecond = 8,
+        SpoofPositionInterval = 5,
+        SpoofVelocity = Vector3.new(0, 0, 0)
+    }
+}
+
+-- Biến lưu trữ trạng thái
+local AntiState = {
+    LastClearTime = tick(),
+    LastStuckCheck = tick(),
+    ActionCount = 0,
+    LastActionTime = tick()
+}
+
+-- Hàm kiểm tra nhân vật
+local function IsCharacterReady()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or LocalPlayer.Character.Humanoid.Health <= 0 then
+        return false
+    end
+    return true
+end
+
+-- Hàm giả lập hành vi người chơi
+local function SimulateHumanBehavior()
+    local randomAction = math.random(1, 4)
+    if randomAction == 1 then
+        LocalPlayer.Character.Humanoid:Move(Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)), false)
+    elseif randomAction == 2 then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    elseif randomAction == 3 then
+        VirtualUser:Button1Down(Vector2.new())
+        wait(0.05)
+        VirtualUser:Button1Up(Vector2.new())
+    elseif randomAction == 4 then
+        LocalPlayer.Character.Humanoid.Jump = true
+    end
+    wait(math.random(AntiConfig.AntiBan.RandomDelayMin, AntiConfig.AntiBan.RandomDelayMax))
+end
+
+-- Hàm kiểm tra hành động
+local function CanPerformAction()
+    if tick() - AntiState.LastActionTime < AntiConfig.AntiBan.ActionCooldown then return false end
+    AntiState.ActionCount = AntiState.ActionCount + 1
+    if AntiState.ActionCount > AntiConfig.AntiBan.MaxActionsPerSecond then
+        wait(1)
+        AntiState.ActionCount = 0
+    end
+    AntiState.LastActionTime = tick()
+    return true
+end
+
+-- Hàm giả lập ping
+local function SpoofPing()
+    local fakePing = math.random(AntiConfig.AntiBan.FakePing.Min, AntiConfig.AntiBan.FakePing.Max)
+    wait(fakePing / 1000)
+end
+
+-- Hàm spoof vị trí
+local function SpoofPosition()
+    if not IsCharacterReady() then return end
+    local rootPart = LocalPlayer.Character.HumanoidRootPart
+    local originalPos = rootPart.Position
+    rootPart.Velocity = AntiConfig.AntiBan.SpoofVelocity
+    rootPart.CFrame = CFrame.new(originalPos + Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)))
+    wait(0.01)
+    rootPart.CFrame = CFrame.new(originalPos)
+end
+
+-- Hàm xóa đối tượng để tăng FPS
+local function ClearObjects()
+    if not CanPerformAction() or tick() - AntiState.LastClearTime < AntiConfig.ClearInterval then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    
+    for _, objName in pairs(AntiConfig.RemoveObjects) do
+        for _, obj in pairs(workspace:GetChildren()) do
+            if obj.Name:lower():match(objName:lower()) then
+                pcall(function()
+                    obj:Destroy()
+                end)
+            end
+        end
+    end
+    
+    AntiState.LastClearTime = tick()
+    print("Cleared unnecessary objects for FPS boost")
+end
+
+-- Hàm tắt hiệu ứng ánh sáng
+local function DisableLightingEffects()
+    if not CanPerformAction() or not AntiConfig.DisableEffects then return end
+    SpoofPing()
+    
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 100000
+    Lighting.Brightness = 1
+    Lighting.ClockTime = 12
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("PostEffect") then
+            effect.Enabled = false
+        end
+    end
+    print("Disabled lighting effects for FPS boost")
+end
+
+-- Hàm giảm chất lượng đồ họa
+local function LowerGraphicsQuality()
+    if not CanPerformAction() or not AntiConfig.LowerGraphics then return end
+    SpoofPing()
+    
+    settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    print("Lowered graphics quality for FPS boost")
+end
+
+-- Hàm tắt bóng
+local function RemoveShadows()
+    if not CanPerformAction() or not AntiConfig.RemoveShadows then return end
+    SpoofPing()
+    
+    Lighting.GlobalShadows = false
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            obj.CastShadow = false
+        end
+    end
+    print("Removed shadows for FPS boost")
+end
+
+-- Hàm kiểm tra và fix stuck
+local function FixStuck()
+    if not CanPerformAction() or tick() - AntiState.LastStuckCheck < AntiConfig.StuckCheckInterval then return end
+    SpoofPing()
+    SimulateHumanBehavior()
+    
+    if IsCharacterReady() and LocalPlayer.Character.HumanoidRootPart.Velocity.Magnitude < AntiConfig.StuckThreshold then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(0, AntiConfig.UnstuckHeight, 0)
+        print("Fixed stuck by teleporting up")
+    end
+    AntiState.LastStuckCheck = tick()
+end
+
+-- Hàm log trạng thái
+local function LogAntiStatus()
+    if not CanPerformAction() then return end
+    SpoofPing()
+    local log = {
+        Timestamp = os.date("%H:%M:%S"),
+        LastClearTime = math.floor(tick() - AntiState.LastClearTime),
+        LastStuckCheck = math.floor(tick() - AntiState.LastStuckCheck)
+    }
+    print(HttpService:JSONEncode(log))
+end
+
+-- Vòng lặp chính
+local function AntiLoop()
+    while wait(0.1 + math.random(AntiConfig.AntiBan.RandomDelayMin, AntiConfig.AntiBan.RandomDelayMax)) do
+        if not IsCharacterReady() then
+            wait(1)
+            continue
+        end
+        
+        ClearObjects()
+        DisableLightingEffects()
+        LowerGraphicsQuality()
+        RemoveShadows()
+        FixStuck()
+        LogAntiStatus()
+    end
+end
+
+-- Chạy vòng lặp
+spawn(function()
+    local success, error = pcall(AntiLoop)
+    if not success then
+        warn("Anti loop crashed: " .. error)
+        wait(2)
+        AntiLoop()
+    end
+end)
+
+-- Thread spoof vị trí
+spawn(function()
+    while wait(AntiConfig.AntiBan.SpoofPositionInterval) do
+        SpoofPosition()
+    end
+end)
