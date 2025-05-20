@@ -1,0 +1,51 @@
+-- Anura Hub | FPS Boost Script
+pcall(function()
+    setfpscap(60) -- Giới hạn FPS để tránh tụt khung hình
+
+    for _, v in pairs(game:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.Reflectance = 0
+        elseif v:IsA("Decal") then
+            v.Transparency = 1
+        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+            v:Destroy()
+        end
+    end
+
+    -- Xóa cây, cỏ, đá, hiệu ứng...
+    local ignoreNames = {"Players", "Lighting", "Workspace.Camera", "ReplicatedStorage"}
+    for _, v in pairs(game.Workspace:GetDescendants()) do
+        if v:IsA("Model") or v:IsA("MeshPart") or v:IsA("Part") then
+            if not table.find(ignoreNames, v.Name) and v:IsDescendantOf(workspace) then
+                if string.find(v.Name:lower(), "tree") or string.find(v.Name:lower(), "bush") or string.find(v.Name:lower(), "rock") then
+                    v:Destroy()
+                end
+            end
+        end
+    end
+
+    -- Tối ưu Lighting
+    local lighting = game:GetService("Lighting")
+    lighting.GlobalShadows = false
+    lighting.FogEnd = 100000
+    lighting.Brightness = 1
+    lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+
+    -- Tắt các tính năng post-processing
+    for _, v in pairs(lighting:GetDescendants()) do
+        if v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") then
+            v.Enabled = false
+        end
+    end
+
+    -- Dọn rác Memory
+    collectgarbage("collect")
+    if sethiddenproperty then
+        sethiddenproperty(game:GetService("UserSettings"), "GamepadCameraSensitivity", 0)
+    end
+
+    print("FPS Boost Loaded - Anura Hub")
+end)
+task.wait(1)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/anuragaming1/Test-scriptv1/refs/heads/main/Cubi"))()
