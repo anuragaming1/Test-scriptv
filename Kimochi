@@ -1,0 +1,41 @@
+local Lighting = game:GetService("Lighting")
+
+-- Cấu hình ánh sáng ban ngày ấm
+Lighting.TimeOfDay = "14:00:00"
+Lighting.Brightness = 2
+Lighting.ClockTime = 14
+Lighting.OutdoorAmbient = Color3.fromRGB(255, 204, 153) -- Ánh sáng cam nhẹ
+Lighting.Ambient = Color3.fromRGB(255, 204, 153)
+Lighting.FogColor = Color3.fromRGB(255, 204, 204)
+Lighting.FogEnd = 100000
+Lighting.FogStart = 0
+Lighting.GlobalShadows = true
+Lighting.EnvironmentDiffuseScale = 0.6
+Lighting.EnvironmentSpecularScale = 1
+Lighting.ExposureCompensation = 0.2
+
+-- Làm trời sáng bằng Sky
+local function setupSky()
+    local existingSky = Lighting:FindFirstChildOfClass("Sky")
+    if existingSky then existingSky:Destroy() end
+
+    local sky = Instance.new("Sky")
+    sky.Name = "AnuraSky"
+    sky.SkyboxBk = "rbxassetid://102145756639209"
+    sky.SkyboxDn = "rbxassetid://131912812460186"
+    sky.SkyboxFt = "rbxassetid://73484786349362"
+    sky.SkyboxLf = "rbxassetid://123852546791653"
+    sky.SkyboxRt = "rbxassetid://101977160732638"
+    sky.SkyboxUp = "rbxassetid://131912812460186"
+    sky.MoonAngularSize = 0
+    sky.SunAngularSize = 21
+    sky.SunTextureId = ""
+    sky.MoonTextureId = ""
+
+    sky.Parent = Lighting
+end
+
+setupSky()
+task.delay(1, function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/anuragaming1/Test-scriptv/refs/heads/main/Toten"))()
+end)
