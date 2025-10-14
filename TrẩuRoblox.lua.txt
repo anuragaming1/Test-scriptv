@@ -10721,8 +10721,8 @@ end)
 		end
 	})
 	Tabs.Server:AddButton({
-		Title = "Vào SERVER VIP FREE",
-		Description = "Tạo server riêng và teleport (cần >1 người)",
+		Title = "Tạo Server Vip free",
+		Description = "Chỉ cần bấm sẽ có Server vip",
 		Callback = function()
 			task.spawn(function()
 				-- MD5 và các hàm hỗ trợ
