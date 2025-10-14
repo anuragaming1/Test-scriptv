@@ -2003,9 +2003,9 @@
 
 	local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 	local Window = Fluent:CreateWindow({
-		Title = "Trẩu roblox [ FREE ]",
-		SubTitle = "  by trauroblox",
-		TabWidth = 160,
+		Title = "Anura Hub [Premium]",
+		SubTitle = "  Script Main",
+		TabWidth = 110,
 		Theme = "Dark",
 		Acrylic = false,
 		Size = UDim2.fromOffset(530, 350),
@@ -2019,7 +2019,7 @@
 	local toggleButton = Instance.new("ImageButton")
 	toggleButton.Size = UDim2.new(0, 50, 0, 50)
 	toggleButton.Position = UDim2.new(0.15, 0, 0.15, 0)
-	toggleButton.Image = "rbxassetid://130160749337944"
+	toggleButton.Image = "rbxassetid://14190262721"
 	toggleButton.ScaleType = Enum.ScaleType.Fit
 	toggleButton.BackgroundTransparency = 1
 	toggleButton.Parent = screenGui
@@ -2073,7 +2073,7 @@
 	end)
 	local Tabs = {
 		Discord = Window:AddTab({
-			Title = "Disord"
+			Title = "Info"
 		}),
 		Server = Window:AddTab({
 			Title = "Server"
@@ -2082,22 +2082,22 @@
 			Title = "Farm"
 		}),
 		Settings = Window:AddTab({
-			Title = "Cài đặt Farm"
+			Title = "Cài đặt"
 		}),
 		Melee = Window:AddTab({
-			Title = "Tự động lấy Võ V2"
+			Title = "Lấy võ V2"
 		}),
 		Quests = Window:AddTab({
-			Title = "Nhiệm vụ - Vật phẩm"
+			Title = "Vật phẩm"
 		}),
 		SeaEvent = Window:AddTab({
 			Title = "Sự kiện Biển"
 		}),
 		Mirage = Window:AddTab({
-			Title = "Đảo Mirage + Chủng tộc V4"
+			Title = "Tộc V4"
 		}),
 		Drago = Window:AddTab({
-			Title = "Đảo Drago Dojo"
+			Title = "Nhiệm vụ Dojo"
 		}),
 		Prehistoric = Window:AddTab({
 			Title = "Tiền sử"
@@ -2106,7 +2106,7 @@
 			Title = "Đột kích"
 		}),
 		Combat = Window:AddTab({
-			Title = "Chiến đấu PVP"
+			Title = "Chiến đấu"
 		}),
 		Travel = Window:AddTab({
 			Title = "Dịch chuyển"
@@ -2120,10 +2120,10 @@
 	}
 
 	Tabs.Discord:AddButton({
-		Title = "Link Join Sever Discord",
-		Description = "Đây nha anh em ( Copy rồi dán vào trình duyệt )",
+		Title = "Link Youtube nè",
+		Description = "Nhấn để Copy",
 		Callback = function()
-			setclipboard(tostring("https://discord.gg/s8R9b5NfsU"))
+			setclipboard(tostring("https://www.youtube.com/@Anura-gaming-real"))
 		end
 	})
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -2131,8 +2131,8 @@
 	if World3 then
 		Tabs.Main:AddSection("Trẩu Roblox")
 		local TeleportToggle = Tabs.Main:AddToggle("tpSubmarineWorker", {
-			Title = "Bay đến NPC Farm Level Trên 2600",
-			Description = "Teleport to Submarine Worker (Level >= 2600, World 3 only)",
+			Title = "Bay đến đảo mới",
+			Description = "Teleport to Submarine Worker",
 			Default = false,
 			Callback = function(value)
 				_G.tpSubmarineWorker = value
